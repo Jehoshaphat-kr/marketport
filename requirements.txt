@@ -1,0 +1,16 @@
+beautifulsoup4==4.9.3
+bs4==0.0.1
+lxml==4.6.3
+numpy==1.20.3
+openpyxl==3.0.7
+pandas==1.2.4
+pickleshare==0.7.5
+pykrx==1.0.19
+pytz==2021.1
+requests==2.25.1
+requests-html==0.10.0
+selenium==3.141.0
+soupsieve==2.2.1
+urllib3==1.26.5
+w3lib==1.22.0
+xlrd==2.0.1
