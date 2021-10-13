@@ -29,13 +29,18 @@ class dock:
         ks_tickers = stock.get_index_ticker_list(market='KOSPI')
         ks_indices = [stock.get_index_ticker_name(ticker) for ticker in ks_tickers]
         ks_kind = ['KS'] * len(ks_tickers)
-        ks = pd.DataFrame(data={'코드':ks_tickers, '지수':ks_indices, '종류':ks_kind})
+        ks = pd.DataFrame(data={'지수코드':ks_tickers, '지수명':ks_indices, '종류':ks_kind})
 
         kq_tickers = stock.get_index_ticker_list(market='KOSDAQ')
         kq_indices = [stock.get_index_ticker_name(ticker) for ticker in kq_tickers]
         kq_kind = ['KQ'] * len(kq_tickers)
-        kq = pd.DataFrame(data={'코드': kq_tickers, '지수': kq_indices, '종류': kq_kind})
-        return pd.concat(objs=[ks, kq], axis=0)
+        kq = pd.DataFrame(data={'지수코드': kq_tickers, '지수명': kq_indices, '종류': kq_kind})
+
+        kx_tickers = stock.get_index_ticker_list(market='KRX')
+        kx_indices = [stock.get_index_ticker_name(ticker) for ticker in kx_tickers]
+        kx_kind = ['KX'] * len(kx_tickers)
+        kx = pd.DataFrame(data={'지수코드': kx_tickers, '지수명': kx_indices, '종류': kx_kind})
+        return pd.concat(objs=[ks, kq, kx], axis=0)
 
     def fetch(self, index: str, tic:str='') -> pd.DataFrame:
         """
@@ -65,7 +70,7 @@ class dock:
         :return:
         """
         print("Proc 02: 전체 지수 업데이트 중..")
-        for n, index in enumerate(self.frm['코드']):
+        for n, index in enumerate(self.frm['지수코드']):
             if debug: print('    {:3.2f}%: {}'.format(100 * (n + 1) / len(self.frm), index))
             data = self.fetch(index=index)
             data.to_csv(os.path.join(self.dir_storage, '{}.csv'.format(index)), encoding='utf-8', index=False)
