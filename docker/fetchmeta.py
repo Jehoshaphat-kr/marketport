@@ -136,7 +136,7 @@ class dock:
         duplicate = data.index.value_counts()
         duplicate = duplicate[duplicate >= 2].index
         if not duplicate.empty:
-            print("중목 항목 발생")
+            print("중복 항목 발생")
             print(data[data.index.isin(duplicate)])
             print('-' * 70)
         return
@@ -145,6 +145,6 @@ class dock:
 if __name__ == "__main__":
     ''' 메타 데이터 관리 '''
     docker = dock(
-        date=datetime(2021, 10, 8)
+        # date=datetime(2021, 10, 8)
     )
     docker.update()
