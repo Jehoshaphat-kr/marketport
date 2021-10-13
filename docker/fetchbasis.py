@@ -135,9 +135,20 @@ class dock:
         data.index = data.index.astype(str).str.zfill(6)
         duplicate = data.index.value_counts()
         duplicate = duplicate[duplicate >= 2].index
+        print("  - 중복 발생 여부 확인 중...", end=" ")
         if not duplicate.empty:
-            print("중복 항목 발생")
+            print('')
             print(data[data.index.isin(duplicate)])
+            print('-' * 70)
+        else:
+            print('없음')
+        print("  - 종가/시가총액 누락 여부 확인 중...", end=" ")
+        na = data[data['종가'].isna() | data['시가총액'].isna()]
+        if na.empty:
+            print("없음")
+        else:
+            print('')
+            print(na)
             print('-' * 70)
         return
 
@@ -145,6 +156,6 @@ class dock:
 if __name__ == "__main__":
     ''' 메타 데이터 관리 '''
     docker = dock(
-        # date=datetime(2021, 10, 8)
+        date=datetime(2021, 10, 13)
     )
     docker.update()

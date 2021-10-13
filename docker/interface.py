@@ -115,7 +115,7 @@ class market(statistic):
         self.base.sort_values(by=['시가총액'], inplace=True, ascending=False)
         return
 
-    def save_market(self) -> None:
+    def save(self) -> None:
         """
         마켓 데이터 저장
         :return:
@@ -131,8 +131,8 @@ if __name__ == "__main__":
     pd.set_option('display.expand_frame_repr', False)
 
     app = market(
-        # date=datetime(2021, 10, 8)
+        date=datetime(2021, 10, 13)
     )
     app.update_percentage()
     app.update_multiple()
-    app.save_market()
+    app.save()

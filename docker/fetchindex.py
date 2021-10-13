@@ -8,13 +8,14 @@ class dock:
     dir_warehouse = os.path.join(__root__, 'warehouse')
     dir_storage = os.path.join(__root__, 'warehouse/index')
     tic = datetime(2010, 1, 2).strftime("%Y%m%d")
-    toc = datetime.today().strftime("%Y%m%d")
 
-    def __init__(self):
+    def __init__(self, date:datetime=None):
         print("=" * 50)
         print("|" + " " * 15 + "KRX 지수 업데이트" + " " * 16 + "|")
         print("=" * 50)
-        print(f"PROP 날짜: {self.toc}")
+        today = datetime.today() if not date else date
+        self.toc = today.strftime("%Y%m%d")
+        print(f"PROP 날짜: {today.strftime('%Y-%m-%d')}")
 
         self.frm = self.__frm__()
         self.frm.to_csv(os.path.join(self.dir_warehouse, 'meta-index.csv'), index=False, encoding='utf-8')

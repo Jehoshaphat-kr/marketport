@@ -11,16 +11,17 @@ class dock:
     dir_storage = os.path.join(__root__, 'warehouse/price')
 
     today = datetime.today()
-    # today = datetime(2021, 10, 8)
     tic = datetime(2010, 1, 2).strftime("%Y%m%d")
-    toc = today.strftime("%Y%m%d")
-    ago = (today - timedelta(1)).strftime("%Y%m%d")
 
-    def __init__(self):
+    def __init__(self, date:datetime=None):
         print("=" * 50)
         print("|" + " " * 15 + "가격 정보 업데이트" + " " * 15 + "|")
         print("=" * 50)
-        print("PROP 날짜: {}".format(self.toc))
+        today = self.today if not date else date
+        self.toc = today.strftime("%Y%m%d")
+        self.ago = (today - timedelta(1)).strftime("%Y%m%d")
+
+        print(f"PROP 날짜: {today.strftime('%Y-%m-%d')}")
         self.meta = pd.read_csv(
             filepath_or_buffer=os.path.join(self.dir_warehouse, 'meta-stock.csv'),
             encoding='utf-8',
@@ -93,7 +94,9 @@ class dock:
         ''' IPO / 액면분할 종목 다운로드 '''
         new = self.tickers_ipo + self.tickers_spl
         if new:
-            print("--> Download IPOs and Splits...")
+            print("  - 신규 상장/액면분할 종목 재편 중")
+        else:
+            print("  - 신규 상장/액면분할 종목 없음")
         for n, ticker in enumerate(new):
             if debug: print('    {:3.2f}%: {}'.format(100 * (n + 1) / len(new), ticker))
             data = self.fetch(ticker=ticker)
@@ -106,8 +109,7 @@ class dock:
                 time.sleep(3)
         ''' ---------------------------------------------------------------------------------- '''
 
-        ''' 정규 종목 가격 업데이트 '''
-        print("--> Update Single Price...")
+        print("Proc 03: 정규 종목 가격 업데이트")
         meta = self.meta.copy()
         market = self.market.copy()
         toc_label = datetime.strptime(self.toc, "%Y%m%d").strftime("%Y-%m-%d")
@@ -151,6 +153,8 @@ class dock:
         print('** 업데이트 실패 항목 ** ')
         if fails:
             print(meta[meta.index.isin(fails)])
+        else:
+            print('  - 없음')
         return
 
 
