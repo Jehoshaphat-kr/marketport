@@ -3,8 +3,8 @@ from datetime import datetime
 
 
 if __name__ == "__main__":
-    # today = datetime.today()
-    today = datetime(2021, 10, 13)
+    today = datetime.today()
+    # today = datetime(2021, 10, 13)
 
     '''
     GEN META-DATA
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     '''
     FETCH INDEX
     '''
-    docker.index().update(debug=False)
+    docker.index(date=today).update(debug=False)
     time.sleep(1)
 
     '''
