@@ -49,7 +49,7 @@ class dock:
             self.etf_update()
 
             data = pd.concat(objs=[self.stocks, self.etfs], axis=0)
-            data.to_csv(os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index=False)
+            data.to_csv(path_or_buf=os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index=False)
 
             self.check_update()
             print("완료")
