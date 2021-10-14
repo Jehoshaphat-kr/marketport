@@ -123,7 +123,7 @@ class dock:
             fetch = stock.get_etf_portfolio_deposit_file(ticker=ticker, date=self.today.strftime("%Y%m%d"))
             if '' in fetch.index:
                 fetch.drop(index=[''], inplace=True)
-            fetch.index = [self.get_name(ticker=t) if t in docker.meta.index else t for t in fetch.index]
+            fetch.index = [self.get_name(ticker=t) if t in self.meta.index else t for t in fetch.index]
 
             curr = pd.concat(
                 objs=[

@@ -27,7 +27,7 @@ jobs:
     - name: Run application
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
-        python "./rundirect.py"
+        python "./runperiodic.py"
 
     - name: Commits
       run: |
