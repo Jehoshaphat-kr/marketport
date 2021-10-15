@@ -8,7 +8,7 @@ __root__ = os.path.dirname(os.path.dirname(__file__))
 class dock:
 
     dir_warehouse = os.path.join(__root__, 'warehouse')
-    dir_storage = os.path.join(__root__, 'warehouse/price')
+    dir_storage = os.path.join(__root__, 'warehouse/series')
 
     today = datetime.today()
     tic = datetime(2010, 1, 2).strftime("%Y%m%d")
