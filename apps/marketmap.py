@@ -326,7 +326,7 @@ class map2js(frame):
             ]
             self.bar[var] = bframe['종목코드'].tolist()
             self.datum = self.datum.append(
-                other=mframe[mframe['종목코드'].isin(self.datum['종목코드'])],
+                other=mframe[~mframe['종목코드'].isin(self.datum['종목코드'])],
                 ignore_index=True
             )
         self.datum.set_index(keys=['종목코드'], inplace=True)
