@@ -9,7 +9,7 @@ __root__ = os.path.dirname(os.path.dirname(__file__))
 warehouse = os.path.join(__root__, 'warehouse')
 class statistic:
 
-    dir_storage = os.path.join(warehouse, 'price')
+    dir_storage = os.path.join(warehouse, 'series')
     frame = pd.DataFrame()
 
     def is_trade_banned(self, ticker) -> bool:

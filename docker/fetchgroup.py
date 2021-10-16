@@ -165,7 +165,7 @@ class dock:
         ETF 최신화 여부 확인
         :return: 
         """
-        etf_online = self.meta[self.meta['종류'] == 'ETF'].copy()
+        etf_online = self.meta[self.meta['거래소'] == 'ETF'].copy()
         etf_offline = pd.read_excel(os.path.join(self.dir_handler, 'TDATETF.xlsx'), index_col='종목코드')
 
         to_be_delete = etf_offline[~etf_offline.index.isin(etf_online.index)]
@@ -178,6 +178,8 @@ class dock:
                 print("--> 없음")
             else:
                 print(frm)
+                if kind == '추가':
+                    os.startfile(self.dir_handler)
             print("-" * 70)
         return
 
@@ -222,4 +224,4 @@ if __name__ == "__main__":
     # docker.etf_update()
 
     ''' THEME '''
-    docker.theme_update()
+    # docker.theme_update()
