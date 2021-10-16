@@ -21,7 +21,7 @@ class statistic:
         self.frame.drop(columns=['거래량'], inplace=True)
 
         today_price = self.frame.iloc[-1].values
-        if today_price[0] == today_price[1] == today_price[2] == 0:
+        if today_price[0] == today_price[1] == 0:
             return True
         return False
 

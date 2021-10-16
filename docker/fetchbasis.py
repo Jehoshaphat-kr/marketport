@@ -52,7 +52,6 @@ class dock:
             data.to_csv(path_or_buf=os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index=False)
 
             self.check_update()
-            print("완료")
         else:
             print("업데이트 대상 없음")
         return
