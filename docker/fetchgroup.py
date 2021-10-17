@@ -33,9 +33,10 @@ class dock:
     def __init__(self):
         return
 
-    def wise_init(self) -> None:
+    def wise_init(self, wise:str='ALL') -> None:
         """
         CHROME 크롤러 초기화
+        :param wise: 분류 방법 선택 실행
         :return:
         """
         print("=" * 50)
@@ -48,6 +49,7 @@ class dock:
         option.add_argument('--disable-dev-shm-usage')
         option.add_argument('--disable-gpu')
 
+        self.wise = wise
         self.driver = webdriver.Chrome(executable_path='chromedriver.exe', options=option)
         return
 
@@ -70,6 +72,8 @@ class dock:
         :return:
         """
         for i, wise, frm in [('01', 'WICS', self.wics_meta), ('02', 'WI26', self.wi26_meta)]:
+            if not self.wise == 'ALL' and not self.wise == wise:
+                continue
             print("Proc {}: {} 분류 다운로드".format(i, wise))
             buff = []
             for n, code in enumerate(frm.index):
@@ -97,6 +101,7 @@ class dock:
                         time.sleep(5)
                 if flag:
                     print("FAILED ***")
+                time.sleep(2)
 
             pd.concat(objs=buff, axis=0, ignore_index=True).to_csv(
                 os.path.join(self.dir_storage, wise + '.csv'),
@@ -117,6 +122,8 @@ class dock:
         meta.reset_index(level=0, inplace=True)
         meta.set_index(keys='종목명', inplace=True)
         for n, wise in enumerate(['WICS', 'WI26']):
+            if not self.wise == 'ALL' and not self.wise == wise:
+                continue
             print(f"Proc 03-{str(n+1).zfill(2)}: {wise} 분류 후처리")
             frm = pd.read_csv(
                 filepath_or_buffer=os.path.join(self.dir_storage, wise + '.csv'),
@@ -214,10 +221,10 @@ if __name__ == "__main__":
     docker = dock()
 
     ''' WICS/WI26 '''
-    # docker.wise_init()
-    # docker.wise_date()
-    # docker.wise_update()
-    # docker.wise_postproc()
+    docker.wise_init(wise='WICS')
+    docker.wise_date()
+    docker.wise_update()
+    docker.wise_postproc()
 
     ''' ETF '''
     # docker.etf_check()
