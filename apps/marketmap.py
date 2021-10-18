@@ -9,8 +9,8 @@ class frame:
 
     time_span = ['R1D', 'R1W', 'R1M', 'R3M', 'R6M', 'R1Y']
     multiples = ['PER', 'PBR', 'DIV']
-    url_g = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/group/{}.csv'
-    url_m = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/market/{}.csv'
+    # url_g = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/group/{}.csv'
+    # url_m = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/market/{}.csv'
     kind = ''
     code = ''
     name = ''
@@ -107,14 +107,24 @@ class frame:
         :return:
         """
         return pd.read_csv(
-            filepath_or_buffer=self.url_g.format(self.kind), encoding='utf-8', index_col='종목코드'
+            filepath_or_buffer=os.path.join(__root__, f'warehouse/group/{self.kind}.csv'),
+            encoding='utf-8', index_col='종목코드'
         ).join(
             other=pd.read_csv(
-                filepath_or_buffer=self.url_m.format(
-                    "market" if self.date == datetime.today().date() else f"{self.date.strftime('%Y%m%d')}market"
-                ),encoding='utf-8', index_col="종목코드"
+                filepath_or_buffer=os.path.join(__root__, 'warehouse/market/market.csv'),
+                encoding='utf-8', index_col="종목코드"
             ).drop(columns=['종목명']), how='left'
         )
+
+        # return pd.read_csv(
+        #     filepath_or_buffer=self.url_g.format(self.kind), encoding='utf-8', index_col='종목코드'
+        # ).join(
+        #     other=pd.read_csv(
+        #         filepath_or_buffer=self.url_m.format(
+        #             "market" if self.date == datetime.today().date() else f"{self.date.strftime('%Y%m%d')}market"
+        #         ),encoding='utf-8', index_col="종목코드"
+        #     ).drop(columns=['종목명']), how='left'
+        # )
 
     def __pre__(self, data:pd.DataFrame) -> pd.DataFrame:
         """
