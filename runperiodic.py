@@ -27,6 +27,7 @@ if __name__ == "__main__":
 
     ''' UPDATE ETF DEPOSIT '''
     docker.deposit(date=today).update()
+    time.sleep(1)
 
     ''' MARKET MAP '''
     maps = apps.marketmap(date=today)
