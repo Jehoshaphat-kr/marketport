@@ -41,7 +41,12 @@ class dock:
         kx_indices = [stock.get_index_ticker_name(ticker) for ticker in kx_tickers]
         kx_kind = ['KX'] * len(kx_tickers)
         kx = pd.DataFrame(data={'종목코드': kx_tickers, '종목명': kx_indices, '거래소': kx_kind})
-        return pd.concat(objs=[ks, kq, kx], axis=0)
+
+        tm_tickers = stock.get_index_ticker_list(market='테마')
+        tm_indices = [stock.get_index_ticker_name(ticker) for ticker in tm_tickers]
+        tm_kind = ['TM'] * len(tm_tickers)
+        tm = pd.DataFrame(data={'종목코드': tm_tickers, '종목명': tm_indices, '거래소': tm_kind})
+        return pd.concat(objs=[ks, kq, kx, tm], axis=0)
 
     def fetch(self, index: str, tic:str='') -> pd.DataFrame:
         """
