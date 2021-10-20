@@ -25,35 +25,29 @@ class dock:
         print("PROP. 날짜 : {}".format(self.today.strftime("%Y-%m-%d")))
         return
 
-    def __trig__(self) -> bool:
+    def __trig__(self) -> None:
         """
         실행 트리거: 상장일에 따라 업데이트 여부 결정
         :return:
         """
-        today = self.today.strftime("%Y-%m-%d")
-        fetch = pd.read_html(self.url_stk, header=0)[0]
-        fetch = fetch[['회사명', '종목코드', '상장일']].rename(columns={'회사명': '종목명'})
-        if fetch[fetch['상장일'] == today].empty:
-            return False
-        self.stocks = fetch.copy()
-        return True
+        self.stocks = pd.read_html(self.url_stk, header=0)[0]
+        self.stocks = self.stocks[['회사명', '종목코드', '상장일']].rename(columns={'회사명': '종목명'})
+        return
 
     def update(self) -> None:
         """
         메타 데이터 업데이트
         :return:
         """
-        if self.__trig__():
-            self.stock_rename()
-            self.stock_update()
-            self.etf_update()
+        self.__trig__()
+        self.stock_rename()
+        self.stock_update()
+        self.etf_update()
 
-            data = pd.concat(objs=[self.stocks, self.etfs], axis=0)
-            data.to_csv(path_or_buf=os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index=False)
+        data = pd.concat(objs=[self.stocks, self.etfs], axis=0)
+        data.to_csv(path_or_buf=os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index=False)
 
-            self.check_update()
-        else:
-            print("업데이트 대상 없음")
+        self.check_update()
         return
 
     def stock_rename(self) -> None:
@@ -155,6 +149,6 @@ class dock:
 if __name__ == "__main__":
     ''' 메타 데이터 관리 '''
     docker = dock(
-        date=datetime(2021, 10, 13)
+        # date=datetime(2021, 10, 13)
     )
     docker.update()
