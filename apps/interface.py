@@ -131,7 +131,7 @@ if __name__ == "__main__":
     pd.set_option('display.expand_frame_repr', False)
 
     app = market(
-        date=datetime(2021, 10, 13)
+        # date=datetime(2021, 10, 13)
     )
     app.update_percentage()
     app.update_multiple()

@@ -116,16 +116,6 @@ class frame:
             ).drop(columns=['종목명']), how='left'
         )
 
-        # return pd.read_csv(
-        #     filepath_or_buffer=self.url_g.format(self.kind), encoding='utf-8', index_col='종목코드'
-        # ).join(
-        #     other=pd.read_csv(
-        #         filepath_or_buffer=self.url_m.format(
-        #             "market" if self.date == datetime.today().date() else f"{self.date.strftime('%Y%m%d')}market"
-        #         ),encoding='utf-8', index_col="종목코드"
-        #     ).drop(columns=['종목명']), how='left'
-        # )
-
     def __pre__(self, data:pd.DataFrame) -> pd.DataFrame:
         """
         시장 지도 데이터 전처리

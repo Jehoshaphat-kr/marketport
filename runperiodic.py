@@ -14,13 +14,6 @@ if __name__ == "__main__":
     docker.price(date=today).update(debug=False)
     time.sleep(2)
 
-    ''' GEN MARKET-DATA '''
-    market = apps.interface(date=today)
-    market.update_percentage()
-    market.update_multiple()
-    market.save()
-    time.sleep(1)
-
     ''' FETCH INDEX '''
     docker.index(date=today).update(debug=False)
     time.sleep(1)
@@ -28,6 +21,13 @@ if __name__ == "__main__":
     ''' UPDATE ETF DEPOSIT '''
     docker.deposit(date=today).update()
     time.sleep(1)
+
+    ''' GEN MARKET-DATA '''
+    market = apps.interface(date=today)
+    market.update_percentage()
+    market.update_multiple()
+    market.save()
+    time.sleep(2)
 
     ''' MARKET MAP '''
     maps = apps.marketmap(date=today)
