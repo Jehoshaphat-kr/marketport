@@ -52,21 +52,18 @@ class statistic:
 
 class market(statistic):
 
-    base = pd.read_csv(
-        filepath_or_buffer=os.path.join(warehouse, 'meta-stock.csv'),
-        encoding='utf-8',
-        index_col='종목코드'
-    )
-    base.index = base.index.astype(str).str.zfill(6)
-    base.drop(columns=['상장일'], inplace=True)
-    today = datetime.today()
-
     def __init__(self, date:datetime=None):
         print("=" * 50)
         print("|" + " " * 14 + "시장 데이터 업데이트" + " " * 14 + "|")
         print("=" * 50)
-
-        self.today = date if date else self.today
+        self.base = pd.read_csv(
+            filepath_or_buffer=os.path.join(warehouse, 'meta-stock.csv'),
+            encoding='utf-8',
+            index_col='종목코드'
+        )
+        self.base.index = self.base.index.astype(str).str.zfill(6)
+        self.base.drop(columns=['상장일'], inplace=True)
+        self.today = date if date else datetime.today()
         print(f"PROP 날짜: {self.today.strftime('%Y-%m-%d')}")
         return
 
