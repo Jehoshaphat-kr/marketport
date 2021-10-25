@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
@@ -199,6 +200,8 @@ def fetch_finance(ticker:str) -> (pd.DataFrame, pd.DataFrame):
 # ================================================================================================================== #
 
 
+meta_stock = stocks()
+meta_index = indices(mode='raw')
 # ================================================================================================================== #
 #                                                   분석 클래스 Classes                                              #
 # ================================================================================================================== #
@@ -224,8 +227,8 @@ class frame:
         self.ticker = ticker
         self.key = on
 
-        mkind = 'stock' if len(ticker) == 6 else 'index'
-        meta = stocks() if mkind == 'stock' else indices(mode='raw')
+        self.mkind = 'stock' if len(ticker) == 6 else 'index'
+        meta = meta_stock if self.mkind == 'stock' else meta_index
         self.equity = meta.loc[ticker, '종목명']
 
         self.basis = pd.read_csv(
@@ -233,7 +236,7 @@ class frame:
             encoding='utf-8',
             index_col='날짜'
         ) if mode == 'online' else pd.read_csv(
-            os.path.join(__root__, f'warehouse/series{ticker}.csv'),
+            os.path.join(__root__, f'warehouse/series/{ticker}.csv'),
             encoding='utf-8',
             index_col='날짜'
         )
@@ -365,7 +368,8 @@ class vstock(frame):
         단일 종목 가격/지수 그래프
         :return:
         """
-        xtick = '주가' if len(self.ticker) == 6 else '지수'
+        xtick = '주가' if self.mkind == 'stock' else '지수'
+        unit = '원' if self.mkind == 'stock' else ''
         fig = go.Figure()
 
         src = self.guideline
@@ -395,7 +399,7 @@ class vstock(frame):
                     mode='lines',
                     showlegend=True,
                     visible=True if col == '종가' else 'legendonly',
-                    hovertemplate='날짜:%{customdata}<br>' + col + ':%{y:,}원<extra></extra>',
+                    hovertemplate='날짜:%{customdata}<br>' + col + ':%{y:,}' + f'{unit}<extra></extra>',
                 )
             )
 
@@ -458,6 +462,7 @@ class vstock(frame):
         추세선 그래프
         :return:
         """
+        unit = '원' if self.mkind == 'stock' else ''
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
         src = self.trendline.copy()
@@ -486,7 +491,7 @@ class vstock(frame):
                 mode='lines',
                 showlegend=True,
                 visible=True,
-                hovertemplate='날짜:%{meta}<br>종가:%{y:,}원<extra></extra>',
+                hovertemplate='날짜:%{meta}<br>종가:%{y:,}' + f'{unit}<extra></extra>',
             ),
             secondary_y=True
         )
@@ -732,139 +737,51 @@ class vstock(frame):
         return fig
 
 
-class evaluate(frame):
+class estimate(frame):
     """
     종목 추세 평가 모델
     """
-    @property
-    def modelInYoung(self) -> pd.DataFrame:
+
+    def m_basic(self, mode:str='actual') -> pd.DataFrame:
         """
-        최초 모델 ::: <평가지표:기본모델>@Google Drive
+        기본 모델 ::: <평가지표:기본모델>@Google Drive
+        :param: mode: 'actual' - Daily 모델 판단 모드 
+                      'tester-all' - 백테스트 전체 모드
+                      'tester-specific' - 백테스트 단일 종목 모드
         :return:
         """
-        price = self.basis['종가'].copy().values
-        guide = self.guideline.copy()
-        trend = self.trendline.copy()
-        deriv = self.momentum.copy()
+        frm = pd.concat(objs=[
+            self.basis, self.trendline, self.momentum
+        ], axis=1)
+        frm['중기모멘텀'] = frm['중기모멘텀'].rolling(5).mean().fillna(0)
+        frm['중장기모멘텀'] = frm['중장기모멘텀'].rolling(5).mean().fillna(0)
 
-        objs = {'종목코드': self.ticker, '종목명': self.equity, 'MA상회': 0}
-        if len(price) < 252 * 2:
-            return pd.DataFrame(data=objs, index=[1])
+        if mode == 'actual':
+            est = frm.iloc[-1].to_dict()
+            if est['중기변화량'] > 0 and est['중장기변화량'] > 0 and est['중기모멘텀'] > 0 and est['중장기모멘텀'] > 0 and est['중기추세'] > 0 and est['중장기추세'] > 0:
+                est['투자적합성'] = '적합'
+            else:
+                est['투자적합성'] = '부적합'
+            return pd.DataFrame(data=est, index=[self.ticker])
+        elif mode.startswith('test'):
+            invest = []
+            for i, date in enumerate(frm.index):
+                data = frm.loc[date].to_dict()
+                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0 and data['중기추세'] > 0 and data['중장기추세'] > 0:
+                    invest.append('적합' if mode == 'tester-all' else data[self.key])
+                else:
+                    invest.append('부적합' if mode == 'tester-all' else np.nan)
+            frm['투자적합성'] = invest
+            return frm
 
-        ''' A '''
-        w10 = [7.5, 7, 6.5, 6, 5.5, 4.5, 4, 3.5, 3, 2.5]
-        for col, term in [('장기', 120), ('중기', 60)]:
-            score = [0 if price[-(n + 1)] < guide[f'MAF{term}D'].values[-(n + 1)] else w for n, w in enumerate(w10)]
-            objs['MA상회'] += sum(score)
 
-        ''' B '''
-        w10 = [15, 14, 13, 12, 11, 9, 8, 7, 6, 5]
-        w05 = [24, 22, 20, 18, 16]
-        for term, wt, score in [('중장기', w10, 100), ('중기', w10, 100), ('단기', w05, 100)]:
-            fails = [0 if deriv[f'{term}변화량'].values[-(n + 1)] > 0 else w for n, w in enumerate(wt)]
-            objs[f'{term}추세'] = round(score - sum(fails), 2)
-
-        ''' C '''
-        wL = [17.6, 19.2, 16, 14.4, 12.8]
-        wM = [22, 24, 20, 18, 16]
-        wS = [26.4, 28.8, 24, 21.6, 19.2]
-        for term, wt, score in [('중장기', wL, 80), ('중기', wM, 100), ('단기', wS, 120)]:
-            fails = [0 if deriv[f'{term}모멘텀'].values[-(n + 1)] > 0 else w for n, w in enumerate(wt)]
-            objs[f'{term}모멘텀'] = round(score - sum(fails), 2)
-
-        ''' D '''
-        wL = [12, 11.2, 10.4, 9.6, 8.8, 7.2, 6.4, 5.6, 4.8, 4]
-        wM = [15, 14, 13, 12, 11, 9, 8, 7, 6, 5]
-        wS = [26.4, 28.8, 24, 21.6, 19.2]
-        for term, wt, score in [('중장기', wL, 80), ('중기', wM, 100), ('단기', wS, 120)]:
-            fails = [0 if trend[f'{term}추세'].values[-(n + 1)] > 0 else w for n, w in enumerate(wt)]
-            objs[f'{term}크로스오버'] = round(score - sum(fails), 2)
-
-        objs['총점'] = round(sum([value for key, value in objs.items() if not key in ['종목코드', '종목명']]), 2)
-
-        ''' E '''
-        wt = [60, 70, 50]
-        short = trend['단기추세'].values
-        for n, w in enumerate(wt):
-            curr = short[-(n + 1)]
-            prev = short[-(n + 2)]
-            if curr > prev and curr * prev < 0:
-                objs['총점'] += w
-        return pd.DataFrame(data=objs, index=[1])
-
-    @property
-    def modelJeMyoung(self) -> pd.DataFrame:
-        price = self.basis.종가.values
-        guide = self.guideline.copy()
-        trend = self.trendline.copy()
-        deriv = self.momentum.copy()
-        if len(price) < 252 * 2:
-            return pd.DataFrame(data={'종목코드':self.ticker, '종목명': self.equity}, index=[1])
-
-        table = pd.DataFrame(
-            data={
-                '종목코드':self.ticker, '종목명': self.equity,
-                '과락여부': 'PASS',
-                'MA상회':0, '크로스오버':0,
-
-                '장기추세상승':'N/A',
-                '단기상승반영':'N/A',
-                '종합': 0
-            },
-            index=[0]
-        )
-
-        ''' 과락 여부 판단 '''
-        trend_l = trend['중장기추세'].values
-        deriv_l = deriv['중장기변화량'].values
-        deriv_m = deriv['중기변화량'].values
-        for td in range(-10, 0, 1):
-            if (trend_l[td] < 0) or ( (td >= -5) and (deriv_l[td] < 0) or (deriv_m[td] < 0) ):
-                table.loc[0, '과락여부'] = 'FAIL'
-                return table
-
-        ''' A '''
-        w10 = [7.5, 7, 6.5, 6, 5.5, 4.5, 4, 3.5, 3, 2.5]
-        for col, term in [('장기', 120), ('중기', 60)]:
-            score = [0 if price[-(n + 1)] < guide[f'MAF{term}D'].values[-(n + 1)] else w for n, w in enumerate(w10)]
-            table.loc[0, 'MA상회'] += sum(score)
-
-        ''' B '''
-
-        # s_trend = trend['단기추세'].values
-        # if s_trend[-1] > 0 and s_trend[-2] > 0 and s_trend[-3] and s_trend[-4]:
-        #     table.loc[0, '단기상승반영'] = 'FAIL'
-        #
-        # s_deriv = deriv['단기변화량'].values
-        # for n in range(4):
-        #     if s_deriv[-(n+1)] < 0:
-        #         table.loc[0, '단기추세상승'] = 'FAIL'
-        #         break
-        #
-        # m_trend = trend['중기추세'].values
-        # m_deriv = deriv['중기변화량'].values
-        # m_mtum = deriv['중기모멘텀'].values
-        # for n in range(10):
-        #     if (n < 2 and m_mtum[-(n+1)] < 0) or (n < 5 and m_trend[-(n+1)] < 0) or (m_deriv[-(n+1)] < 0):
-        #         table.loc[0, '중기추세상승'] = 'FAIL'
-        #         break
-        #
-        # l_trend = trend['중장기추세'].values
-        # l_deriv = deriv['중장기변화량'].values
-        # for n in range(10):
-        #     if l_trend[-(n+1)] < 0 or l_deriv[-(n+1)] < 0:
-        #         table.loc[0, '중기추세상승'] = 'FAIL'
-        #         break
-
-        table.loc[0, '종합'] = table[['MA상회']].loc[0].sum()
-        return table
-
+    
 
 if __name__ == "__main__":
     # print(stocks())
     # print(indices())
 
-    asset = frame(ticker='2203')
+    # asset = frame(ticker='2203', on='종가', time_stamp=5, mode='offline')
     # print(asset.equity)
     # print(asset.basis)
     # print(asset.guideline)
@@ -872,11 +789,7 @@ if __name__ == "__main__":
     # print(asset.trendline)
     # print(asset.momentum)
 
-    # evaluation = evaluate(ticker='051910')
-    # print(evaluation.modelInYoung.T)
-    # print(evaluation.modelJeMyoung.T)
-
-    # display = vstock(ticker='003670')
+    # display = vstock(ticker='2203', on='종가', time_stamp=5, mode='offline')
     # display.show_price().show()
     # display.show_trend().show()
     # display.show_momentum().show()
@@ -885,3 +798,59 @@ if __name__ == "__main__":
     # display.show_sales(kind='quarter').show()
     # display.show_financial_ratio(kind='annual').show()
     # display.show_financial_ratio(kind='quarter').show()
+
+    # model = estimate(ticker='204270', on='종가', time_stamp=5, mode='offline')
+    # print(model.equity)
+    # print(model.m_basic(mode='tester-specific'))
+
+
+    ''' TEST '''
+    from pykrx import stock
+    samples = []
+    for ind in ['1002', '1003', '2203']:
+        samples += stock.get_index_portfolio_deposit_file(ticker=ind)
+
+    print("start")
+    record = []
+    for i, sample in enumerate(samples):
+        model = estimate(ticker=sample, time_stamp=0, mode='offline')
+        est = model.m_basic(mode='tester-all')
+        objs = {'종목명': model.equity, '종목코드': model.ticker}
+        print(f'{100 * (i+1)/len(samples):.2f}%...{model.ticker}::{model.equity}')
+        price = est[['시가', '저가', '고가', '종가']].copy()
+        if len(price) < 252*1.5:
+            continue
+        is_pass = [False] * (len(price) - 20)
+        for j in range(len(price) - 20):
+            afters = price[j+1:j + 21].values.flatten()
+            if afters[0] == 0:
+                continue
+            for after in afters[1:]:
+                if after == 0:
+                    continue
+                if 100 * (after / afters[0] - 1) >= 5:
+                    is_pass[j] = True
+                    break
+        sr = pd.Series(data=is_pass, index=price.index[:-20], name='투자성공여부')
+        est = est.join(sr, how='left')[:-20]
+
+        n_select = est[est['투자적합성'] == '적합'].copy()
+        if n_select.empty:
+            continue
+        n_pass = n_select[n_select['투자성공여부'] == True]
+        tic = est.index[0].date()
+        toc = est.index[-1].date()
+        objs['모델정확도'] = 100 * len(n_pass) / len(n_select)
+        objs['검증시점'] = tic
+        objs['검증종점'] = toc
+        objs['검증기간'] = (toc - tic).days
+        objs['기간대비적합일'] = 100 * len(n_select) / len(est)
+        # print(f"투자 모델 정확도: {100 * len(n_pass) / len(n_select):.2f}%")
+        # print(f"- 투자 기간: {tic} ~ {toc} ({(toc - tic).days}일간)")
+        # print(f"- 투자 판단 일수: {len(n_select)}일")
+        # print(f"- 기간 대비 판단일: {100 * len(n_select) / len(est):.2f}%")
+        record.append(objs)
+    pd.DataFrame(data=record).to_csv(r'test.csv', encoding='euc-kr')
+
+
+
