@@ -221,7 +221,7 @@ if __name__ == "__main__":
     docker = dock()
 
     ''' WICS/WI26 '''
-    docker.wise_init(wise='WICS')
+    docker.wise_init(wise='WI26')
     docker.wise_date()
     docker.wise_update()
     docker.wise_postproc()
