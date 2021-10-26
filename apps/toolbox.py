@@ -768,9 +768,9 @@ class estimate(frame):
             for i, date in enumerate(frm.index):
                 data = frm.loc[date].to_dict()
                 if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0 and data['중기추세'] > 0 and data['중장기추세'] > 0:
-                    invest.append('적합' if mode == 'tester-all' else data[self.key])
+                    invest.append('적합' if mode.endswith('all') else data[self.key])
                 else:
-                    invest.append('부적합' if mode == 'tester-all' else np.nan)
+                    invest.append('부적합' if mode.endswith('all') else np.nan)
             frm['투자적합성'] = invest
             return frm
 
