@@ -48,7 +48,7 @@ def stocks(mode:str='in-use') -> pd.DataFrame:
         frm['종가'] = frm['종가'].apply(lambda p: '{:,}원'.format(int(p)))
         cap = (frm["시가총액"] / 100000000).astype(int).astype(str)
         frm['시가총액'] = cap.apply(lambda v: v + "억" if len(v) < 5 else v[:-4] + '조 ' + v[-4:] + '억')
-        frm.index = frm.index.astype(str).str.zfill(6)
+    frm.index = frm.index.astype(str).str.zfill(6)
     return frm
 
 def indices(mode:str='display') -> pd.DataFrame:
