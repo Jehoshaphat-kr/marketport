@@ -11,7 +11,7 @@ __root__ = os.path.dirname(os.path.dirname(__file__))
 # ================================================================================================================== #
 #                                               기초 함수 Basic Functions                                            #
 # ================================================================================================================== #
-def stocks() -> pd.DataFrame:
+def stocks(mode:str='in-use') -> pd.DataFrame:
     """
     종목 메타데이터 호출
     :return:
@@ -31,19 +31,24 @@ def stocks() -> pd.DataFrame:
                 'http://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/market/market.csv',
                 encoding='utf-8',
                 index_col='종목코드'
-            )[['R1D', 'R1W', 'R1M', 'PER', 'DIV']].rename(columns={'R1D': '1일등락', 'R1W': '1주등락', 'R1M': '1개월등락'}),
+            ).drop(columns=['종목명', '종가', '시가총액']),
             how='left'
         )],
         axis=1
     )
-    for col in frm.columns:
-        if '등락' in col:
-            frm[col] = round(frm[col], 2).astype(str) + '%'
-    frm['PER'] = round(frm['PER'], 2)
-    frm['종가'] = frm['종가'].apply(lambda p: '{:,}원'.format(int(p)))
-    cap = (frm["시가총액"] / 100000000).astype(int).astype(str)
-    frm['시가총액'] = cap.apply(lambda v: v + "억" if len(v) < 5 else v[:-4] + '조 ' + v[-4:] + '억')
-    frm.index = frm.index.astype(str).str.zfill(6)
+
+    if mode == 'in-use':
+        frm = frm[
+            ['섹터', '종목명', '종가', '시가총액', 'R1D', 'R1W', 'R1M', 'PER', 'DIV']
+        ].rename(columns={'R1D': '1일등락', 'R1W': '1주등락', 'R1M': '1개월등락'})
+        for col in frm.columns:
+            if '등락' in col:
+                frm[col] = round(frm[col], 2).astype(str) + '%'
+        frm['PER'] = round(frm['PER'], 2)
+        frm['종가'] = frm['종가'].apply(lambda p: '{:,}원'.format(int(p)))
+        cap = (frm["시가총액"] / 100000000).astype(int).astype(str)
+        frm['시가총액'] = cap.apply(lambda v: v + "억" if len(v) < 5 else v[:-4] + '조 ' + v[-4:] + '억')
+        frm.index = frm.index.astype(str).str.zfill(6)
     return frm
 
 def indices(mode:str='display') -> pd.DataFrame:
@@ -799,58 +804,9 @@ if __name__ == "__main__":
     # display.show_financial_ratio(kind='annual').show()
     # display.show_financial_ratio(kind='quarter').show()
 
-    # model = estimate(ticker='204270', on='종가', time_stamp=5, mode='offline')
-    # print(model.equity)
-    # print(model.m_basic(mode='tester-specific'))
-
-
-    ''' TEST '''
-    from pykrx import stock
-    samples = []
-    for ind in ['1002', '1003', '2203']:
-        samples += stock.get_index_portfolio_deposit_file(ticker=ind)
-
-    print("start")
-    record = []
-    for i, sample in enumerate(samples):
-        model = estimate(ticker=sample, time_stamp=0, mode='offline')
-        est = model.m_basic(mode='tester-all')
-        objs = {'종목명': model.equity, '종목코드': model.ticker}
-        print(f'{100 * (i+1)/len(samples):.2f}%...{model.ticker}::{model.equity}')
-        price = est[['시가', '저가', '고가', '종가']].copy()
-        if len(price) < 252*1.5:
-            continue
-        is_pass = [False] * (len(price) - 20)
-        for j in range(len(price) - 20):
-            afters = price[j+1:j + 21].values.flatten()
-            if afters[0] == 0:
-                continue
-            for after in afters[1:]:
-                if after == 0:
-                    continue
-                if 100 * (after / afters[0] - 1) >= 5:
-                    is_pass[j] = True
-                    break
-        sr = pd.Series(data=is_pass, index=price.index[:-20], name='투자성공여부')
-        est = est.join(sr, how='left')[:-20]
-
-        n_select = est[est['투자적합성'] == '적합'].copy()
-        if n_select.empty:
-            continue
-        n_pass = n_select[n_select['투자성공여부'] == True]
-        tic = est.index[0].date()
-        toc = est.index[-1].date()
-        objs['모델정확도'] = 100 * len(n_pass) / len(n_select)
-        objs['검증시점'] = tic
-        objs['검증종점'] = toc
-        objs['검증기간'] = (toc - tic).days
-        objs['기간대비적합일'] = 100 * len(n_select) / len(est)
-        # print(f"투자 모델 정확도: {100 * len(n_pass) / len(n_select):.2f}%")
-        # print(f"- 투자 기간: {tic} ~ {toc} ({(toc - tic).days}일간)")
-        # print(f"- 투자 판단 일수: {len(n_select)}일")
-        # print(f"- 기간 대비 판단일: {100 * len(n_select) / len(est):.2f}%")
-        record.append(objs)
-    pd.DataFrame(data=record).to_csv(r'test.csv', encoding='euc-kr')
+    model = estimate(ticker='204270', on='종가', time_stamp=5, mode='offline')
+    print(model.equity)
+    print(model.m_basic(mode='tester-specific'))
 
 
 
