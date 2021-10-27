@@ -100,6 +100,33 @@ def calc_filtered(data: pd.Series, window_or_cutoff:list) -> pd.DataFrame:
     lpfs = {f'LPF{str(cutoff).zfill(2)}D': __lpf__(cutoff=cutoff, sample=252) for cutoff in window_or_cutoff}
     return mafs.join(other=pd.concat(objs=lpfs, axis=1), how='left')
 
+def calc_trending(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    필터선 기준 추세/변화량/모멘텀 정보 생성
+    :param data:
+    :return:
+    """
+    norm = 100 * (data - data.min().min()) / (data.max().max() - data.min().min())
+    objs = {
+        '장기추세': norm['LPF120D'] - norm['MAF120D'],
+        '중장기추세': norm['LPF60D'] - norm['MAF120D'],
+        '중기추세': norm['LPF60D'] - norm['MAF60D'],
+        '중단기추세': norm['LPF20D'] - norm['MAF60D'],
+        '단기추세': norm['LPF05D'] - norm['MAF20D'],
+        '중장기GC': norm['MAF60D'] - norm['MAF120D'],
+        '중기GC': norm['MAF20D'] - norm['MAF60D'],
+        '단기GC': norm['MAF05D'] - norm['MAF20D']
+    }
+    _df_ = pd.concat(objs=objs, axis=1)
+
+    objs = {}
+    for c in _df_.columns:
+        if not '추세' in c:
+            continue
+        objs[c.replace('추세', '변화량')] = _df_[c].diff()
+        objs[c.replace('추세', '모멘텀')] = _df_[c].diff().diff()
+    return _df_.join(other=pd.concat(objs=objs, axis=1), how='left')
+
 def calc_yield(data: pd.Series) -> pd.DataFrame:
     """
     1개월:5년 누적 수익률
@@ -217,20 +244,26 @@ class frame:
     :: guideline: 이동평균선 / 저대역통과선(LPF)
     :: yieldline: 기간별 수익률
     :: trendline: 추세선
-    :: momentum: 추세 미분선
     :: dropline: 낙폭
     :: finance: 재무제표 데이터
     """
-    def __init__(self, ticker:str, on:str='종가', time_stamp:int=5, mode:str='offline'):
+    def __init__(self,
+                 ticker:str,
+                 on:str='종가',
+                 end_date:datetime=datetime.today(),
+                 time_stamp:int=5,
+                 mode:str='offline'):
         """
         marketport @GITHUB 주가/지수 데이터 분석
         :param ticker: 종목코드/지수코드
         :param on: 가이드라인/모멘텀선/수익률곡선/낙폭 계산 시 참조 가격 (종가 기준)
+        :param end_date: 마감 일자
         :param time_stamp: 시계열 Cut 기준 연수(year)
         :param mode: offline - 로컬 사용 / online - GITHUB 서버 사용
         """
         self.ticker = ticker
         self.key = on
+        self.e_date = end_date
 
         self.mkind = 'stock' if len(ticker) == 6 else 'index'
         meta = meta_stock if self.mkind == 'stock' else meta_index
@@ -246,6 +279,8 @@ class frame:
             index_col='날짜'
         )
         self.basis.index = pd.to_datetime(self.basis.index)
+        if not end_date.date() == datetime.today().date():
+            self.basis = self.basis[self.basis.index <= end_date]
         if time_stamp:
             self.tic = self.basis.index[-1] - timedelta(365 * time_stamp)
             self.basis = self.basis[self.basis.index >= self.tic]
@@ -253,7 +288,6 @@ class frame:
         self.g_line = pd.DataFrame()    # 필터선
         self.y_line = pd.DataFrame()    # 수익선
         self.t_line = pd.DataFrame()    # 추세선
-        self.m_line = pd.DataFrame()    # 모멘텀
         self.d_line = pd.DataFrame()    # 낙폭
         self.f_a = pd.DataFrame()
         self.f_q = pd.DataFrame()
@@ -295,40 +329,8 @@ class frame:
         if not self.t_line.empty:
             return self.t_line
 
-        guideline = self.guideline.copy()
-        norm = 100 * (guideline - guideline.min().min())/(guideline.max().max() - guideline.min().min())
-
-        objs = {
-            '장기추세': norm['LPF120D'] - norm['MAF120D'],
-            '중장기추세': norm['LPF60D'] - norm['MAF120D'],
-            '중기추세': norm['LPF60D'] - norm['MAF60D'],
-            '중단기추세': norm['LPF20D'] - norm['MAF60D'],
-            '단기추세': norm['LPF05D'] - norm['MAF20D'],
-            '중장기GC': norm['MAF60D'] - norm['MAF120D'],
-            '중기GC': norm['MAF20D'] - norm['MAF60D'],
-            '단기GC': norm['MAF05D'] - norm['MAF20D']
-        }
-        self.t_line = pd.concat(objs=objs, axis=1).dropna()
+        self.t_line = calc_trending(data=self.guideline)
         return self.t_line
-
-    @property
-    def momentum(self) -> pd.DataFrame:
-        """
-        주가 모멘텀
-        :return:
-        """
-        if not self.m_line.empty:
-            return self.m_line
-
-        base = self.trendline.copy()
-        objs = {}
-        for c in base.columns:
-            if not '추세' in c:
-                continue
-            objs[c.replace('추세', '변화량')] = base[c].diff()
-            objs[c.replace('추세', '모멘텀')] = base[c].diff().diff()
-        self.m_line = pd.concat(objs=objs, axis=1)
-        return self.m_line
 
     @property
     def drawdown(self) -> pd.DataFrame:
@@ -473,6 +475,8 @@ class vstock(frame):
         src = self.trendline.copy()
         dform = ['{}/{}/{}'.format(d.year, d.month, d.day) for d in src.index]
         for col in src.columns:
+            if '변화량' in col or '모멘텀' in col:
+                continue
             fig.add_trace(
                 go.Scatter(
                     x=src.index,
@@ -545,7 +549,8 @@ class vstock(frame):
         """
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
 
-        raw = self.momentum.copy().dropna()
+        cols = [col for col in self.trendline.columns if '변화량' in col or '모멘텀' in col]
+        raw = self.trendline.copy()[cols].dropna()
         for col in raw.columns:
             src = raw[col]
             fig.add_trace(
@@ -756,7 +761,7 @@ class estimate(frame):
         :return:
         """
         frm = pd.concat(objs=[
-            self.basis, self.trendline, self.momentum
+            self.basis, self.trendline
         ], axis=1)
         frm['중기모멘텀'] = frm['중기모멘텀'].rolling(5).mean().fillna(0)
         frm['중장기모멘텀'] = frm['중장기모멘텀'].rolling(5).mean().fillna(0)
@@ -784,17 +789,16 @@ class estimate(frame):
 
 if __name__ == "__main__":
     # print(stocks())
-    # print(indices())
+    # print(indices(mode='raw'))
 
-    # asset = frame(ticker='2203', on='종가', time_stamp=5, mode='offline')
+    # asset = frame(ticker='005930', on='종가', time_stamp=5, mode='offline')
     # print(asset.equity)
     # print(asset.basis)
     # print(asset.guideline)
     # print(asset.yieldline)
     # print(asset.trendline)
-    # print(asset.momentum)
 
-    # display = vstock(ticker='2203', on='종가', time_stamp=5, mode='offline')
+    # display = vstock(ticker='005960', on='종가', end_date=datetime(2018, 10, 27), time_stamp=5, mode='offline')
     # display.show_price().show()
     # display.show_trend().show()
     # display.show_momentum().show()
