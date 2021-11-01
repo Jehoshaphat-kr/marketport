@@ -146,6 +146,50 @@ def calc_yield(data: pd.Series) -> pd.DataFrame:
         axis=1
     )
 
+def calc_answer(data: pd.DataFrame, by:str='종가', td:int=20, yld:float=5.0) -> pd.DataFrame:
+    """
+    거래일(td) 기준 수익률(yld) 만족 지점 표기 데이터프레임
+    :param data: 가격 정보 [시가, 저가, 고가, 종가] 포함 데이터프레임
+    :param by: 기준 가격 정보
+    :param td: 목표 거래일
+    :param yld: 목표 수익률
+    :return:
+    """
+    calc = data[['시가', '저가', '고가', '종가']].copy()
+    pass_fail = [False] * len(calc)
+    pass_point = [np.nan] * len(calc)
+    points = calc[by].values
+    for i in range(len(calc)):
+        if i > (len(calc) - td):
+            continue
+        afters = calc[i + 1:i + td + 1].values.flatten()
+        if afters[0] == 0:
+            continue
+
+        for after in afters[1:]:
+            if after == 0:
+                continue
+            if 100 * (after / afters[0] - 1) >= yld:
+                pass_fail[i] = True
+                pass_point[i] = points[i]
+                break
+    calc['달성여부'] = pass_fail
+    calc['달성지점'] = pass_point
+
+    scale = ['#F63538', '#BF4045', '#8B444E', '#414554', '#35764E', '#2F9E4F', '#30CC5A']
+    thres = {
+        5: [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0],
+        10: [-3, -2, -1, 1, 2, 3],
+        15: [-4, -2.5, -1, 1, 2.5, 4],
+        20: [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0],
+        40: [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0]
+    }
+    for day, bound in thres.items():
+        calc[f'{day}TD수익률'] = round(100 * calc[by].pct_change(periods=day).shift(-day).fillna(0), 2)
+        cindex = [calc[f'{day}TD수익률'].min()] + bound + [calc[f'{day}TD수익률'].max()]
+        calc[f'{day}TD색상'] = pd.cut(calc[f'{day}TD수익률'], bins=cindex, labels=scale, right=True)
+    return calc.drop(columns=['시가', '저가', '고가', '종가'])
+
 def fetch_finance(ticker:str) -> (pd.DataFrame, pd.DataFrame):
     """
     재무제표 기본형 다운로드
@@ -808,9 +852,215 @@ if __name__ == "__main__":
     # display.show_financial_ratio(kind='annual').show()
     # display.show_financial_ratio(kind='quarter').show()
 
-    model = estimate(ticker='204270', on='종가', time_stamp=5, mode='offline')
-    print(model.equity)
-    print(model.m_basic(mode='tester-specific'))
+    # model = estimate(ticker='204270', on='종가', time_stamp=5, mode='offline')
+    # print(model.equity)
+    # print(model.m_basic(mode='tester-specific'))
 
+    ##################################################################################################################
+
+    from pykrx import stock
+    # samples = []
+    # for ind in ['1002', '1003', '2203']:
+    # for ind in ['1003']:
+    #     samples += stock.get_index_portfolio_deposit_file(ticker=ind)
+    samples = ['005930', '000660']
+
+    report = []
+    for m, ticker in enumerate(samples):
+        frm = frame(ticker=ticker, on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
+
+        price_line = frm.basis.drop(columns=['거래량'])
+        index_date = price_line.index
+        if len(price_line) < 252 * 2:
+            continue
+
+        print(f'{100 * (m + 1) / len(samples)}%...{ticker} {frm.equity}  :: 성공률: ', end='')
+        obj = {'종목명': frm.equity, '종목코드': ticker}
+        if os.path.isfile(f'{ticker}.csv'):
+            frm = pd.read_csv(f'{ticker}.csv', encoding='utf-8', index_col='날짜')
+            frm.index = pd.to_datetime(frm.index)
+        else:
+            frm = pd.DataFrame()
+            for n, date in enumerate(index_date[:-20]):
+                if n <= 120:
+                    continue
+                _price_line = price_line[price_line.index <= date].copy()
+                _guide_line = calc_filtered(_price_line.종가, window_or_cutoff=[5, 10, 20, 60, 120])
+                _trend_line = calc_trending(data=_guide_line)
+                _line = pd.concat([_price_line, _guide_line, _trend_line], axis=1)
+                _line.index.name = '날짜'
+                _line.reset_index(level=0, inplace=True)
+
+
+                _line['중기변화량']
+
+                data = _line.iloc[-5].to_dict()
+
+                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0:# and data['중기추세'] > 0 and data['중장기추세'] > 0:
+                    data['투자적합성'] = '적합'
+                    data['투자시기'] = data['종가']
+                else:
+                    data['투자적합성'] = '부적합'
+                    data['투자시기'] = np.nan
+
+                answer_set = price_line[n+1:n+11].values.flatten()
+                std = answer_set[0]
+                data['투자성공'] = False
+                if std == 0:
+                    pass
+                else:
+                    for comp in answer_set[1:]:
+                        if comp == 0:
+                            continue
+                        if (comp/std - 1) >= 0.03:
+                            data['투자성공'] = True
+                            break
+                frm = frm.append(pd.DataFrame(data=data, index=[data['날짜']]))
+            frm.to_csv(f'{ticker}.csv', encoding='utf-8', index=False)
+
+        m_recommend = frm[frm['투자적합성'] == '적합'].copy()
+        if m_recommend.empty:
+            continue
+        m_success = m_recommend[m_recommend['투자성공'] == True].copy()
+
+        obj['성공률'] = 100 * len(m_success)/len(m_recommend)
+        obj['시작일'] = frm.index[0].date()
+        obj['종료일'] = frm.index[-1].date()
+        obj['기간'] = (frm.index[-1] - frm.index[0]).days
+        obj['적합률'] = 100 * len(m_recommend)/len(frm)
+        report.append(obj)
+        print(f'{obj["성공률"]:.2f}%')
+    df = pd.DataFrame(report)
+    df.to_csv(r'Report.csv', encoding='euc-kr', index=False)
+
+
+
+    # ref_frm = frame(ticker=ticker, on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
+    # dno_frm = pd.read_csv(rf'./{ticker}.csv', encoding='utf-8', index_col='날짜')
+    # dno_frm.index = pd.to_datetime(dno_frm.index)
+    # prc = ref_frm.basis
+    # ref = ref_frm.guideline
+    #
+    # dno = dno_frm[[col for col in ref.columns if not '10' in col]].copy()
+    #
+    # fig = go.Figure()
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=prc.index,
+    #         y=prc['종가'],
+    #         name='종가'
+    #     )
+    # )
+    # for col in ref.columns:
+    #     if '10' in col:
+    #         continue
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=ref.index,
+    #             y=ref[col],
+    #             name='평가'+col,
+    #             visible='legendonly' if 'MAF' in col else True
+    #         )
+    #     )
+    #
+    # for col in dno.columns:
+    #     if 'MAF' in col: continue
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=dno.index,
+    #             y=dno[col],
+    #             name='실제'+col,
+    #             mode='lines',
+    #             line=dict(dash='dot'),
+    #         )
+    #     )
+
+
+    # fig = go.Figure()
+    # src = dno_frm[[col for col in ref_frm.guideline.columns if not '10' in col]].copy()
+    # for col in src.columns:
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=src.index,
+    #             y=src[col],
+    #             name=col,
+    #             mode='lines',
+    #             line=dict(dash='dot' if 'MAF' in col else 'dash'),
+    #             showlegend=True,
+    #             visible=True if col in ['MAF120D', 'MAF60D', 'MAF20D', 'LPF60D', 'LPF05D'] else 'legendonly',
+    #             hovertemplate=f'{col}<extra></extra>'
+    #         )
+    #     )
+    #
+    # src = dno_frm.copy()
+    # dform = ['{}/{}/{}'.format(d.year, d.month, d.day) for d in src.index]
+    # for col in ['종가', '시가', '저가', '고가']:
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=src.index,
+    #             y=src[col],
+    #             customdata=dform,
+    #             name=col,
+    #             mode='lines',
+    #             showlegend=True,
+    #             visible=True if col == '종가' else 'legendonly',
+    #             hovertemplate='날짜:%{customdata}<br>' + col + ':%{y:,}<extra></extra>',
+    #         )
+    #     )
+    #
+    # fig.add_trace(
+    #     go.Candlestick(
+    #         x=src.index,
+    #         customdata=dform,
+    #         open=src['시가'],
+    #         high=src['고가'],
+    #         low=src['저가'],
+    #         close=src['종가'],
+    #         increasing_line=dict(color='red'),
+    #         decreasing_line=dict(color='blue'),
+    #         name='일봉',
+    #         visible='legendonly',
+    #         showlegend=True,
+    #     )
+    # )
+
+    # fig.update_layout(
+    #     dict(
+    #         title=f'<b>[{ref_frm.equity}({ticker})]</b> 가격 분석',
+    #         plot_bgcolor='white',
+    #         annotations=[
+    #             dict(
+    #                 text="TDAT 내일모레, the-day-after-tomorrow.tistory.com",
+    #                 showarrow=False,
+    #                 xref="paper", yref="paper",
+    #                 x=0.005, y=-0.002
+    #             )
+    #         ],
+    #         legend=dict(traceorder='reversed'),
+    #         yaxis=dict(title=f'가격[KRW]', showgrid=True, zeroline=False, showticklabels=True, autorange=True,
+    #                    gridcolor='lightgrey'),
+    #         xaxis=dict(
+    #             title='날짜', showgrid=True, zeroline=False, showticklabels=True, autorange=True, gridcolor='lightgrey',
+    #             rangeselector=dict(
+    #                 buttons=list([
+    #                     dict(count=1, label="1m", step="month", stepmode="backward"),
+    #                     dict(count=3, label="3m", step="month", stepmode="backward"),
+    #                     dict(count=6, label="6m", step="month", stepmode="backward"),
+    #                     dict(count=1, label="YTD", step="year", stepmode="todate"),
+    #                     dict(count=1, label="1y", step="year", stepmode="backward"),
+    #                     dict(count=3, label="3y", step="year", stepmode="backward"),
+    #                     dict(step="all")
+    #                 ])
+    #             )
+    #         ),
+    #         xaxis_rangeslider=dict(visible=False)
+    #     )
+    # )
+    # fig.update_traces(
+    #     selector=dict(type='candlestick'),
+    #     xhoverformat='%Y-%m-%d',
+    #     yhoverformat=','
+    # )
+    # fig.show()
 
 
