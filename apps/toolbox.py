@@ -188,6 +188,7 @@ def calc_answer(data: pd.DataFrame, by:str='종가', td:int=20, yld:float=5.0) -
         calc[f'{day}TD수익률'] = round(100 * calc[by].pct_change(periods=day).shift(-day).fillna(0), 2)
         cindex = [calc[f'{day}TD수익률'].min()] + bound + [calc[f'{day}TD수익률'].max()]
         calc[f'{day}TD색상'] = pd.cut(calc[f'{day}TD수익률'], bins=cindex, labels=scale, right=True)
+        calc[f'{day}TD색상'].fillna(scale[0])
     return calc.drop(columns=['시가', '저가', '고가', '종가'])
 
 def fetch_finance(ticker:str) -> (pd.DataFrame, pd.DataFrame):
