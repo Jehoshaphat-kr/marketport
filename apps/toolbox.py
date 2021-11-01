@@ -73,14 +73,15 @@ def indices(mode:str='display') -> pd.DataFrame:
     frm = pd.concat(objs=objs, axis=1).fillna('-')
     return frm if mode=='display' else index_raw
 
-def calc_filtered(data: pd.Series, window_or_cutoff:list) -> pd.DataFrame:
+def calc_filtered(data: pd.Series, window_or_cutoff:list, mode:str='lowpass') -> pd.DataFrame:
     """
     이동평균선 / 저대역통과선 프레임
     :param data: 시가/저가/고가/종가 중
     :param window_or_cutoff:
+    :param mode: 'butter', 'lowpass'
     :return:
     """
-    def __lpf__(cutoff: int, sample: int = 252, order: int = 1) -> pd.Series:
+    def __btf__(cutoff: int, order: int = 1) -> pd.Series:
         """
         Low Pass Filter
         :param cutoff: 컷 오프 주파수
@@ -88,16 +89,27 @@ def calc_filtered(data: pd.Series, window_or_cutoff:list) -> pd.DataFrame:
         :param order: 필터 차수
         :return:
         """
-        normal_cutoff = (sample / cutoff) / (sample / 2)
+        normal_cutoff = (252 / cutoff) / (252 / 2)
         coeff_a, coeff_b = butter(order, normal_cutoff, btype='low', analog=False)
         y = filtfilt(coeff_a, coeff_b, data)
         return pd.Series(data=y, index=data.index)
 
+    def __lpf__(cutoff):
+        normal_cutoff = (252 / cutoff) / (252 / 2)
+        x = data.values
+        y = [0] * len(data)
+        yk = x[0]
+        for k in range(len(data)):
+            yk += normal_cutoff * (x[k] - yk)
+            y[k] = yk
+        return pd.Series(data=y, index=data.index)
+
+    filter = __btf__ if mode == 'butter' else __lpf__
     mafs = pd.concat(
         objs={f'MAF{str(window).zfill(2)}D': data.rolling(window).mean() for window in window_or_cutoff},
         axis=1
     )
-    lpfs = {f'LPF{str(cutoff).zfill(2)}D': __lpf__(cutoff=cutoff, sample=252) for cutoff in window_or_cutoff}
+    lpfs = {f'LPF{str(cutoff).zfill(2)}D': filter(cutoff=cutoff) for cutoff in window_or_cutoff}
     return mafs.join(other=pd.concat(objs=lpfs, axis=1), how='left')
 
 def calc_trending(data: pd.DataFrame) -> pd.DataFrame:
@@ -844,7 +856,8 @@ if __name__ == "__main__":
     # print(asset.trendline)
 
     # display = vstock(ticker='005960', on='종가', end_date=datetime(2018, 10, 27), time_stamp=5, mode='offline')
-    # display.show_price().show()
+    display = vstock(ticker='044340', on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
+    display.show_price().show()
     # display.show_trend().show()
     # display.show_momentum().show()
     # display.show_drawdown().show()
@@ -864,75 +877,75 @@ if __name__ == "__main__":
     # for ind in ['1002', '1003', '2203']:
     # for ind in ['1003']:
     #     samples += stock.get_index_portfolio_deposit_file(ticker=ind)
-    samples = ['005930', '000660']
-
-    report = []
-    for m, ticker in enumerate(samples):
-        frm = frame(ticker=ticker, on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
-
-        price_line = frm.basis.drop(columns=['거래량'])
-        index_date = price_line.index
-        if len(price_line) < 252 * 2:
-            continue
-
-        print(f'{100 * (m + 1) / len(samples)}%...{ticker} {frm.equity}  :: 성공률: ', end='')
-        obj = {'종목명': frm.equity, '종목코드': ticker}
-        if os.path.isfile(f'{ticker}.csv'):
-            frm = pd.read_csv(f'{ticker}.csv', encoding='utf-8', index_col='날짜')
-            frm.index = pd.to_datetime(frm.index)
-        else:
-            frm = pd.DataFrame()
-            for n, date in enumerate(index_date[:-20]):
-                if n <= 120:
-                    continue
-                _price_line = price_line[price_line.index <= date].copy()
-                _guide_line = calc_filtered(_price_line.종가, window_or_cutoff=[5, 10, 20, 60, 120])
-                _trend_line = calc_trending(data=_guide_line)
-                _line = pd.concat([_price_line, _guide_line, _trend_line], axis=1)
-                _line.index.name = '날짜'
-                _line.reset_index(level=0, inplace=True)
-
-
-                _line['중기변화량']
-
-                data = _line.iloc[-5].to_dict()
-
-                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0:# and data['중기추세'] > 0 and data['중장기추세'] > 0:
-                    data['투자적합성'] = '적합'
-                    data['투자시기'] = data['종가']
-                else:
-                    data['투자적합성'] = '부적합'
-                    data['투자시기'] = np.nan
-
-                answer_set = price_line[n+1:n+11].values.flatten()
-                std = answer_set[0]
-                data['투자성공'] = False
-                if std == 0:
-                    pass
-                else:
-                    for comp in answer_set[1:]:
-                        if comp == 0:
-                            continue
-                        if (comp/std - 1) >= 0.03:
-                            data['투자성공'] = True
-                            break
-                frm = frm.append(pd.DataFrame(data=data, index=[data['날짜']]))
-            frm.to_csv(f'{ticker}.csv', encoding='utf-8', index=False)
-
-        m_recommend = frm[frm['투자적합성'] == '적합'].copy()
-        if m_recommend.empty:
-            continue
-        m_success = m_recommend[m_recommend['투자성공'] == True].copy()
-
-        obj['성공률'] = 100 * len(m_success)/len(m_recommend)
-        obj['시작일'] = frm.index[0].date()
-        obj['종료일'] = frm.index[-1].date()
-        obj['기간'] = (frm.index[-1] - frm.index[0]).days
-        obj['적합률'] = 100 * len(m_recommend)/len(frm)
-        report.append(obj)
-        print(f'{obj["성공률"]:.2f}%')
-    df = pd.DataFrame(report)
-    df.to_csv(r'Report.csv', encoding='euc-kr', index=False)
+    # samples = ['005930', '000660']
+    #
+    # report = []
+    # for m, ticker in enumerate(samples):
+    #     frm = frame(ticker=ticker, on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
+    #
+    #     price_line = frm.basis.drop(columns=['거래량'])
+    #     index_date = price_line.index
+    #     if len(price_line) < 252 * 2:
+    #         continue
+    #
+    #     print(f'{100 * (m + 1) / len(samples)}%...{ticker} {frm.equity}  :: 성공률: ', end='')
+    #     obj = {'종목명': frm.equity, '종목코드': ticker}
+    #     if os.path.isfile(f'{ticker}.csv'):
+    #         frm = pd.read_csv(f'{ticker}.csv', encoding='utf-8', index_col='날짜')
+    #         frm.index = pd.to_datetime(frm.index)
+    #     else:
+    #         frm = pd.DataFrame()
+    #         for n, date in enumerate(index_date[:-20]):
+    #             if n <= 120:
+    #                 continue
+    #             _price_line = price_line[price_line.index <= date].copy()
+    #             _guide_line = calc_filtered(_price_line.종가, window_or_cutoff=[5, 10, 20, 60, 120])
+    #             _trend_line = calc_trending(data=_guide_line)
+    #             _line = pd.concat([_price_line, _guide_line, _trend_line], axis=1)
+    #             _line.index.name = '날짜'
+    #             _line.reset_index(level=0, inplace=True)
+    #
+    #
+    #             _line['중기변화량']
+    #
+    #             data = _line.iloc[-5].to_dict()
+    #
+    #             if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0:# and data['중기추세'] > 0 and data['중장기추세'] > 0:
+    #                 data['투자적합성'] = '적합'
+    #                 data['투자시기'] = data['종가']
+    #             else:
+    #                 data['투자적합성'] = '부적합'
+    #                 data['투자시기'] = np.nan
+    #
+    #             answer_set = price_line[n+1:n+11].values.flatten()
+    #             std = answer_set[0]
+    #             data['투자성공'] = False
+    #             if std == 0:
+    #                 pass
+    #             else:
+    #                 for comp in answer_set[1:]:
+    #                     if comp == 0:
+    #                         continue
+    #                     if (comp/std - 1) >= 0.03:
+    #                         data['투자성공'] = True
+    #                         break
+    #             frm = frm.append(pd.DataFrame(data=data, index=[data['날짜']]))
+    #         frm.to_csv(f'{ticker}.csv', encoding='utf-8', index=False)
+    #
+    #     m_recommend = frm[frm['투자적합성'] == '적합'].copy()
+    #     if m_recommend.empty:
+    #         continue
+    #     m_success = m_recommend[m_recommend['투자성공'] == True].copy()
+    #
+    #     obj['성공률'] = 100 * len(m_success)/len(m_recommend)
+    #     obj['시작일'] = frm.index[0].date()
+    #     obj['종료일'] = frm.index[-1].date()
+    #     obj['기간'] = (frm.index[-1] - frm.index[0]).days
+    #     obj['적합률'] = 100 * len(m_recommend)/len(frm)
+    #     report.append(obj)
+    #     print(f'{obj["성공률"]:.2f}%')
+    # df = pd.DataFrame(report)
+    # df.to_csv(r'Report.csv', encoding='euc-kr', index=False)
 
 
 
