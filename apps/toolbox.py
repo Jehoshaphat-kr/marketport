@@ -133,8 +133,6 @@ def calc_trending(data: pd.DataFrame) -> pd.DataFrame:
 
     objs = {}
     for c in _df_.columns:
-        if not '추세' in c:
-            continue
         objs[c.replace('추세', '변화량')] = _df_[c].diff()
         objs[c.replace('추세', '모멘텀')] = _df_[c].diff().diff()
     return _df_.join(other=pd.concat(objs=objs, axis=1), how='left')
@@ -169,8 +167,6 @@ def calc_answer(data: pd.DataFrame, by:str='종가', td:int=20, yld:float=5.0) -
     """
     calc = data[['시가', '저가', '고가', '종가']].copy()
     pass_fail = [False] * len(calc)
-    pass_point = [np.nan] * len(calc)
-    points = calc[by].values
     for i in range(len(calc)):
         if i > (len(calc) - td):
             continue
@@ -183,10 +179,8 @@ def calc_answer(data: pd.DataFrame, by:str='종가', td:int=20, yld:float=5.0) -
                 continue
             if 100 * (after / afters[0] - 1) >= yld:
                 pass_fail[i] = True
-                pass_point[i] = points[i]
                 break
     calc['달성여부'] = pass_fail
-    calc['달성지점'] = pass_point
 
     scale = ['#F63538', '#BF4045', '#8B444E', '#414554', '#35764E', '#2F9E4F', '#30CC5A']
     thres = {
