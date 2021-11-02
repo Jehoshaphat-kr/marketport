@@ -309,7 +309,8 @@ class frame:
                  on:str='종가',
                  end_date:datetime=datetime.today(),
                  time_stamp:int=5,
-                 mode:str='offline'):
+                 mode:str='offline',
+                 filter_type:str='lowpass'):
         """
         marketport @GITHUB 주가/지수 데이터 분석
         :param ticker: 종목코드/지수코드
@@ -317,10 +318,12 @@ class frame:
         :param end_date: 마감 일자
         :param time_stamp: 시계열 Cut 기준 연수(year)
         :param mode: offline - 로컬 사용 / online - GITHUB 서버 사용
+        :param filter_type: 필터 종류
         """
         self.ticker = ticker
         self.key = on
         self.e_date = end_date
+        self.f_type = filter_type
 
         self.mkind = 'stock' if len(ticker) == 6 else 'index'
         meta = meta_stock if self.mkind == 'stock' else meta_index
@@ -361,7 +364,8 @@ class frame:
 
         self.g_line = calc_filtered(
             data=self.basis[self.key],
-            window_or_cutoff=[5, 10, 20, 60, 120]
+            window_or_cutoff=[5, 10, 20, 60, 120],
+            mode=self.f_type
         )
         return self.g_line
 
@@ -427,7 +431,7 @@ class vstock(frame):
     """
     분석 시각화 툴
     """
-    def show_price(self) -> go.Figure:
+    def show_price(self, filter_hover:bool=False) -> go.Figure:
         """
         단일 종목 가격/지수 그래프
         :return:
@@ -437,7 +441,9 @@ class vstock(frame):
         fig = go.Figure()
 
         src = self.guideline
+        dform = ['{}/{}/{}'.format(d.year, d.month, d.day) for d in src.index]
         for col in src.columns:
+            hover = col + '<br>필터: %{y:.2f}<br>날짜: %{customdata}' if filter_hover else f'{col}'
             fig.add_trace(
                 go.Scatter(
                     x=src.index,
@@ -446,8 +452,9 @@ class vstock(frame):
                     mode='lines',
                     line=dict(dash='dot' if 'MAF' in col else 'dash'),
                     showlegend=True,
+                    customdata=dform,
                     visible=True if col in ['MAF120D', 'MAF60D','MAF20D', 'LPF60D', 'LPF05D'] else 'legendonly',
-                    hovertemplate=f'{col}<extra></extra>'
+                    hovertemplate=hover + '<extra></extra>'
                 )
             )
 
@@ -855,9 +862,9 @@ if __name__ == "__main__":
     # print(asset.yieldline)
     # print(asset.trendline)
 
-    # display = vstock(ticker='005960', on='종가', end_date=datetime(2018, 10, 27), time_stamp=5, mode='offline')
-    display = vstock(ticker='044340', on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
-    display.show_price().show()
+    display = vstock(ticker='044340', on='종가', end_date=datetime(2018, 10, 21), time_stamp=5, mode='offline', filter_type='butter')
+    # display = vstock(ticker='044340', on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
+    display.show_price(filter_hover=True).show()
     # display.show_trend().show()
     # display.show_momentum().show()
     # display.show_drawdown().show()
