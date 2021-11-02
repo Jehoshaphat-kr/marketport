@@ -133,8 +133,8 @@ def calc_trending(data: pd.DataFrame) -> pd.DataFrame:
 
     objs = {}
     for c in _df_.columns:
-        objs[c.replace('추세', '변화량')] = _df_[c].diff()
-        objs[c.replace('추세', '모멘텀')] = _df_[c].diff().diff()
+        objs[c.replace('추세', '변화량') if c.endswith('추세') else c + '변화량'] = _df_[c].diff()
+        objs[c.replace('추세', '모멘텀') if c.endswith('추세') else c + '모멘텀'] = _df_[c].diff().diff()
     return _df_.join(other=pd.concat(objs=objs, axis=1), how='left')
 
 def calc_yield(data: pd.Series) -> pd.DataFrame:
