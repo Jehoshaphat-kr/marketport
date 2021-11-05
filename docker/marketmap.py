@@ -291,7 +291,7 @@ class map2js(frame):
     ids = {}
     bar = {}
 
-    suffix = codecs.open(filename=os.path.join(__root__, 'apps/handler/map-suffix.js'), mode='r', encoding='utf-8').read()
+    suffix = codecs.open(filename=os.path.join(__root__, 'docker/handler/map-suffix.js'), mode='r', encoding='utf-8').read()
     datum = pd.DataFrame(columns=['종목코드'])
     cover = list()
 

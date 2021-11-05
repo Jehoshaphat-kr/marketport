@@ -1,4 +1,4 @@
-import docker, time, apps
+import docker, time
 from datetime import datetime
 
 
@@ -23,13 +23,13 @@ if __name__ == "__main__":
     time.sleep(1)
 
     ''' GEN MARKET-DATA '''
-    market = apps.interface(date=today)
+    market = docker.interface(date=today)
     market.update_percentage()
     market.update_multiple()
     market.save()
     time.sleep(2)
 
     ''' MARKET MAP '''
-    maps = apps.marketmap(date=today)
+    maps = docker.marketmap(date=today)
     maps.collect()
     maps.convert()
