@@ -1,17 +1,8 @@
-import os
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
-from scipy.signal import butter,filtfilt
 
-
-__root__ = os.path.dirname(os.path.dirname(__file__))
 # ================================================================================================================== #
 #                                               기초 함수 Basic Functions                                            #
 # ================================================================================================================== #
-def stocks(mode:str='in-use') -> pd.DataFrame:
+def stocks(mode :st r ='in-use') -> pd.DataFrame:
     """
     종목 메타데이터 호출
     :return:
@@ -51,7 +42,7 @@ def stocks(mode:str='in-use') -> pd.DataFrame:
     frm.index = frm.index.astype(str).str.zfill(6)
     return frm
 
-def indices(mode:str='display') -> pd.DataFrame:
+def indices(mode :st r ='display') -> pd.DataFrame:
     """
     인덱스 메타데이터 호출
     :param mode:
@@ -71,9 +62,9 @@ def indices(mode:str='display') -> pd.DataFrame:
         obj.reset_index(level=0, inplace=True)
         objs.append(obj)
     frm = pd.concat(objs=objs, axis=1).fillna('-')
-    return frm if mode=='display' else index_raw
+    return frm if mod e= ='display' else index_raw
 
-def calc_filtered(data: pd.Series, window_or_cutoff:list, mode:str='lowpass') -> pd.DataFrame:
+def calc_filtered(data: pd.Series, window_or_cutoff :list, mode :st r ='lowpass') -> pd.DataFrame:
     """
     이동평균선 / 저대역통과선 프레임
     :param data: 시가/저가/고가/종가 중
@@ -156,7 +147,7 @@ def calc_yield(data: pd.Series) -> pd.DataFrame:
         axis=1
     )
 
-def calc_answer(data: pd.DataFrame, by:str='종가', td:int=20, yld:float=5.0) -> pd.DataFrame:
+def calc_answer(data: pd.DataFrame, by :st r ='종가', td :in t =20, yld :floa t =5.0) -> pd.DataFrame:
     """
     거래일(td) 기준 수익률(yld) 만족 지점 표기 데이터프레임
     :param data: 가격 정보 [시가, 저가, 고가, 종가] 포함 데이터프레임
@@ -197,7 +188,7 @@ def calc_answer(data: pd.DataFrame, by:str='종가', td:int=20, yld:float=5.0) -
         calc[f'{day}TD색상'].fillna(scale[0])
     return calc.drop(columns=['시가', '저가', '고가', '종가'])
 
-def fetch_finance(ticker:str) -> (pd.DataFrame, pd.DataFrame):
+def fetch_finance(ticker :str) -> (pd.DataFrame, pd.DataFrame):
     """
     재무제표 기본형 다운로드
     :param ticker: 종목코드
@@ -299,12 +290,12 @@ class frame:
     :: finance: 재무제표 데이터
     """
     def __init__(self,
-                 ticker:str,
-                 on:str='종가',
-                 end_date:datetime=datetime.today(),
-                 time_stamp:int=5,
-                 mode:str='offline',
-                 filter_type:str='lowpass'):
+                 ticker :str,
+                 on :st r ='종가',
+                 end_date :datetim e =datetime.today(),
+                 time_stamp :in t =5,
+                 mode :st r ='offline',
+                 filter_type :st r ='lowpass'):
         """
         marketport @GITHUB 주가/지수 데이터 분석
         :param ticker: 종목코드/지수코드
@@ -425,7 +416,7 @@ class vstock(frame):
     """
     분석 시각화 툴
     """
-    def show_price(self, filter_hover:bool=False) -> go.Figure:
+    def show_price(self, filter_hover :boo l =False) -> go.Figure:
         """
         단일 종목 가격/지수 그래프
         :return:
@@ -447,7 +438,7 @@ class vstock(frame):
                     line=dict(dash='dot' if 'MAF' in col else 'dash'),
                     showlegend=True,
                     customdata=dform,
-                    visible=True if col in ['MAF120D', 'MAF60D','MAF20D', 'LPF60D', 'LPF05D'] else 'legendonly',
+                    visible=True if col in ['MAF120D', 'MAF60D' ,'MAF20D', 'LPF60D', 'LPF05D'] else 'legendonly',
                     hovertemplate=hover + '<extra></extra>'
                 )
             )
@@ -689,7 +680,7 @@ class vstock(frame):
             buttons.append(dict(
                 label=gap,
                 method='update',
-                args=[{'visible':visible}]
+                args=[{'visible' :visible}]
             ))
 
         fig.update_layout(dict(
@@ -709,7 +700,7 @@ class vstock(frame):
         ))
         return fig
 
-    def show_sales(self, kind:str='annual') -> go.Figure:
+    def show_sales(self, kind :st r ='annual') -> go.Figure:
         """
         매출/영업이익/당기순이익
         :param kind:
@@ -810,10 +801,10 @@ class estimate(frame):
     종목 추세 평가 모델
     """
 
-    def m_basic(self, mode:str='actual') -> pd.DataFrame:
+    def m_basic(self, mode :st r ='actual') -> pd.DataFrame:
         """
         기본 모델 ::: <평가지표:기본모델>@Google Drive
-        :param: mode: 'actual' - Daily 모델 판단 모드 
+        :param: mode: 'actual' - Daily 모델 판단 모드
                       'tester-all' - 백테스트 전체 모드
                       'tester-specific' - 백테스트 단일 종목 모드
         :return:
@@ -835,7 +826,8 @@ class estimate(frame):
             invest = []
             for i, date in enumerate(frm.index):
                 data = frm.loc[date].to_dict()
-                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0 and data['중기추세'] > 0 and data['중장기추세'] > 0:
+                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0 and data
+                    ['중기추세'] > 0 and data['중장기추세'] > 0:
                     invest.append('적합' if mode.endswith('all') else data[self.key])
                 else:
                     invest.append('부적합' if mode.endswith('all') else np.nan)
@@ -843,18 +835,23 @@ class estimate(frame):
             return frm
 
 
-    
+
 
 if __name__ == "__main__":
+
+    myAsset = asset(ticker='005930')
+    # test = myAsset.sma(on='종가', windows=[5, 10, 20, 60, 120])
+    # print(test)
+
     # print(stocks())
     # print(indices(mode='raw'))
 
-    asset = frame(ticker='005930', on='종가', time_stamp=5, mode='offline')
+    # asset = frame(ticker='005930', on='종가', time_stamp=5, mode='offline')
     # print(asset.equity)
     # print(asset.basis)
     # print(asset.guideline)
     # print(asset.yieldline)
-    print(asset.trendline)
+    # print(asset.trendline)
 
     # display = vstock(ticker='044340', on='종가', end_date=datetime(2018, 10, 21), time_stamp=5, mode='offline', filter_type='butter')
     # display = vstock(ticker='044340', on='종가', end_date=datetime.today(), time_stamp=0, mode='offline')
