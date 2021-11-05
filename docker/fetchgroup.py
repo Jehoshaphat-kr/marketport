@@ -50,7 +50,7 @@ class dock:
         option.add_argument('--disable-gpu')
 
         self.wise = wise
-        self.driver = webdriver.Chrome(executable_path='chromedriver.exe', options=option)
+        self.driver = webdriver.Chrome(executable_path='./chromedriver.exe', options=option)
         return
 
     def wise_date(self) -> None:
@@ -78,7 +78,7 @@ class dock:
             buff = []
             for n, code in enumerate(frm.index):
                 name = frm.loc[code, 'Sector']
-                print("Proc {}-{}: {:.2f}% {}".format(i, str(n+1).zfill(2), 100 * (n+1)/len(frm), name), end=" ")
+                print(f"Proc {i}-{str(n+1).zfill(2)}: {100*(n+1)/len(frm):.2f}% {name}", end=" ")
 
                 flag = False
                 for retry in range(1, 6):
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     docker = dock()
 
     ''' WICS/WI26 '''
-    docker.wise_init(wise='WI26')
+    docker.wise_init(wise='WICS')
     docker.wise_date()
     docker.wise_update()
     docker.wise_postproc()
