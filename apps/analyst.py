@@ -51,7 +51,6 @@ def stocks(mode:str='in-use') -> pd.DataFrame:
 
 
 class toolkit:
-
     @staticmethod
     def __sma__(base:pd.Series, windows:list) -> pd.DataFrame:
         """
@@ -110,43 +109,57 @@ class toolkit:
             objs[f'LPF{cutoff}D'] = pd.Series(data=lfilter(taps, 1.0, base), index=base.index)
         return pd.concat(objs=objs, axis=1)
 
-    def verify_span(self, base:pd.DataFrame, kind:str) -> pd.DataFrame:
+    def verifier(self, base:pd.DataFrame, pick:str, sample) -> pd.DataFrame:
         """
-
-        :param base:
-        :param kind:
+        필터 안정화 기간 판정 프레임
+        :param base: 필터 대상 시계열 데이터(주가)
+        :param pick: 적용 필터 종류
+        :param sample: 날짜(datetime) 입력 또는 정수(int) 입력
         :return:
-        """
-        app = {'sma':self.__sma__, 'ema':self.__ema__, 'btr':self.__btr__, 'lpf':self.__lpf__}[kind.lower()]
-        ver = pd.DataFrame()
-        for date in base.index[121:]:
-            rebase = base[base.index <= date].copy()
-            out = app(base=rebase, windows=[5, 10, 20, 60])
-            ver = ver.append(out.iloc[-1])
-        cols = ver.columns.tolist()
-        ver.rename(columns=dict(zip(cols, [col + '-T' for col in cols])), inplace=True)
-        return ver
+        ** sample == 1 또는 sample == datetime(2015, 4, 3)
+                   BTR5D        BTR10D        BTR20D        BTR60D   2015-04-03
+        0   44000.011094  44014.566377  44126.798049  44595.287779        0일차
+        1   44151.467641  44338.634013  44519.024210  44857.759991        1일차
+        ...          ...           ...           ...           ...          ...
+        28  44098.916008  44102.594753  44252.354188  44743.962672       28일차
+        29  44098.916008  44102.594750  44252.280630  44715.876359       29일차
 
-    def verify_point(self, base:pd.DataFrame, kind:str) -> pd.DataFrame:
+        ** sample > 1
+                       BTR5D    BTR10D    BTR20D    BTR60D
+        2013-06-28  0.048598  1.471260  2.824817  4.069192
+        2015-05-07  0.846610  1.600933  2.043675  2.593163
+        ...              ...       ...       ...       ...
+        2020-07-24  0.273825  0.388971  0.254921  0.848624
+        2020-03-11  1.484396  1.829621  2.249649  3.825485
         """
+        if type(sample) == int and len(base.index) < (1.5 * sample):
+            raise ValueError('Verification Failed :: Not Enough Data Samples (분석 종목을 변경하세요)')
 
-        :param base:
-        :param kind:
-        :return:
-        """
-        app = {'sma': self.__sma__, 'ema': self.__ema__, 'btr': self.__btr__, 'lpf': self.__lpf__}[kind.lower()]
+        app = {'sma': self.__sma__, 'ema': self.__ema__, 'btr': self.__btr__, 'lpf': self.__lpf__}[pick.lower()]
 
-        time_span = base.index[121:-50].tolist()
-        time_pick = random.sample(time_span, 1)[0]
-        n_start = time_span.index(time_pick)
-        datum = []
-        for n, date in enumerate(time_span[n_start : n_start+50]):
-            rebase = base[base.index <= date].copy()
-            out = app(base=rebase, windows=[5, 10, 20, 60])
-            data = out.iloc[-(n+1)].to_dict()
-            data[f'{time_pick.strftime("%Y-%m-%d")}'] = f'{n}일차'
-            datum.append(data)
-        return pd.DataFrame(data=datum)
+        time_span = base.index[121:-30].tolist()
+        time_pick = random.sample(time_span, sample) if type(sample) == int else sample
+        def __proc__(date:datetime, add_col:bool) -> pd.DataFrame:
+            n_date = time_span.index(date)
+            datum = []
+            for n, d in enumerate(time_span[n_date : n_date + 25]):
+                rebase = base[base.index <= d].copy()
+                out = app(base=rebase, windows=[5, 10, 20, 60])
+                data = out.iloc[-(n+1)].to_dict()
+                if add_col: data[f'{date.strftime("%Y-%m-%d")}'] = f'{n}일차'
+                datum.append(data)
+            return pd.DataFrame(data=datum)
+
+        if sample == 1 or type(sample) == datetime:
+            return __proc__(date=time_pick[0] if type(sample) == int else time_pick, add_col=True)
+
+        objs = []
+        for _t in time_pick:
+            ver = __proc__(date=_t, add_col=False)
+            err = (100 * (ver.iloc[-1]/ver.iloc[0] - 1)).abs().to_dict()
+            objs.append(err)
+        return pd.DataFrame(data=objs, index=time_pick)
+
 
 class asset(toolkit):
 
@@ -164,11 +177,12 @@ class asset(toolkit):
         keys = kwargs.keys()
         self.meta = kwargs['meta']
         self.ticker = kwargs['ticker'] if 'ticker' in keys else '005930'
-        self.name = self.meta.loc[self.ticker, '종목명']
         self.src = kwargs['src'] if 'src' in keys else 'online'
         self.windows = kwargs['windows'] if 'windows' in keys else [5, 10, 20, 60, 120]
         self.filterby = kwargs['filterby'] if 'filterby' in keys else '저가'
 
+        self.name = self.meta.loc[self.ticker, '종목명']
+        self.sector = self.meta.loc[self.ticker, '섹터']
         self.price = pd.read_csv(
             f'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/series/{self.ticker}.csv',
             encoding='utf-8',
@@ -198,8 +212,16 @@ class asset(toolkit):
             self._guide_ = pd.concat(objs=[self.sma, self.ema, self.btr, self.lpf], axis=1)
         return self._guide_
 
+
 class chart(asset):
     def layout(self, title:str='', xtitle:str='날짜', ytitle:str='') -> go.Layout:
+        """
+        기본 차트 레이아웃
+        :param title: 차트 제목 
+        :param xtitle: x축 이름
+        :param ytitle: y축 이름
+        :return: 
+        """
         return go.Layout(
             title=f'<b>{self.name}[{self.ticker}]</b> : {title}',
             plot_bgcolor='white',
@@ -236,74 +258,78 @@ class chart(asset):
             ),
         )
 
-    def filters(self, **kwargs):
+    def guidance(self, *args, show:bool=False) -> go.Figure:
         """
         주가 가이던스(필터 선) 차트
-        :param kwargs:
+        :param args: Plot 대상 필터 (기본 :: 전체)
+        :param show: True::즉시 Plot
         :return:
         """
-        keys = kwargs.keys()
-        pick = kwargs['pick'] if 'pick' in keys else None
-        td = kwargs['td'] if 'td' in keys else ['20D', '60D']
-        show = kwargs['show'] if 'show' in keys else False
-
-        fig = go.Figure(layout=self.layout())
+        flg = True if not args else False
+        fig = go.Figure(layout=self.layout(title='주가 가이던스 차트', ytitle='가격(KRW)'))
         frm = self.guide.copy()
         frm = frm.join(self.price[self.filterby], how='left')
         for col in frm.columns:
-            if col == self.filterby or pick.lower() == 'all':
-                pass
-            else:
+            if (not flg) and (not col == self.filterby):
                 line = [l for l in ['SMA', 'EMA', 'BTR', 'LPF'] if col.startswith(l)][0]
-                if pick and (not line in pick):
+                if (not flg) and (not line in args):
                     continue
 
-            unit = '[-]' if col.endswith('D') else '[KRW]'
-            fig.add_trace(
-                go.Scatter(
-                    x=frm.index,
-                    y=frm[col],
-                    name=col,
-                    visible=True if col[-3:] in td or (not col.endswith('D')) else 'legendonly',
-                    meta=['{}/{}/{}'.format(d.year, d.month, d.day) for d in frm.index],
-                    hovertemplate=col + '<br>날짜: %{meta}<br>필터: %{y:,.2f}' + unit + '<extra></extra>'
-                )
-            )
+            cond = col[-3:] == '20D' or col[-3:] == '60D' or (not col.endswith('D'))
+            unit = '[-]' if col.endswith('D') else '원'
+            fig.add_trace(go.Scatter(
+                x=frm.index,
+                y=frm[col],
+                name=col,
+                visible=True if cond else 'legendonly',
+                meta=['{}/{}/{}'.format(d.year, d.month, d.day) for d in frm.index],
+                hovertemplate=col + '<br>날짜: %{meta}<br>필터: %{y:,.2f}' + unit + '<extra></extra>'
+            ))
         if show:
             fig.show()
-            return
-        else:
-            return fig
+        return fig
 
-    def stability(self, kind:str, td:str='20D'):
-        verify = self.verify_point(base=self.price[self.filterby], kind=kind.lower())
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=verify[verify.columns[-1]],
-                y=verify[f'{kind.upper()}{td}'],
-                name=f'{kind.upper()}{td}'
-            )
-        )
-        fig.show()
-        return
+    def guidance_stability(self, pick:str, sample, show:bool=False) -> go.Figure:
+        """
+        주가 가이던스(필터 선) 임의의 날짜 안정화 기간 검증용 차트
+        :param pick: Plot 대상 필터
+        :param sample: 날짜(datetime) 입력 또는 정수(int) 입력
+        :param show: True::즉시 Plot
+        :return:
+        """
+        if type(sample) == int and sample > 1:
+            raise ValueError('Only ONE Datetime Point must be passed :: 단일 시점 분석 대상임')
+
+        frm = self.verifier(base=self.price[self.filterby], pick=pick.lower(), sample=sample)
+        fig = go.Figure(layout=self.layout(
+            title=f'{frm.columns[-1]} 안정 반응 기간',
+            xtitle='순차 기간',
+            ytitle=f'{self.filterby} 필터'
+        ))
+
+        for col in frm.columns[:-1]:
+            fig.add_trace(go.Scatter(
+                x=frm[frm.columns[-1]],
+                y=frm[col].values,
+                name=col,
+                mode='lines+markers',
+                meta=[100 * (val/frm[col].values[0] - 1) for val in frm[col].values],
+                hovertemplate='일차:%{x}<br>값:%{y:,.2f}<br>오차:%{meta:.2f}%<extra></extra>',
+                visible=True if col.endswith('20D') else 'legendonly'
+            ))
+        if show:
+            fig.show()
+        return fig
 
 
 
 if __name__ == "__main__":
 
     myChart = chart(meta=stocks(), ticker='000660')
+    # myChart.guidance('BTR', show=True)
 
-    verify = myChart.verify_point(base=myChart.price['종가'], kind='btr')
+    # verify = myChart.verifier(myChart.price['저가'], pick='btr', sample=100)
+    # print(verify)
+    # print(verify.describe())
+    myChart.guidance_stability(pick='lpf', show=True, sample=datetime(2014, 5, 30))
 
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=verify[verify.columns[-1]],
-            y=verify['BTR20D'],
-            name='BTR20D'
-        )
-    )
-    fig.show()
-
-    # myChart.filters(show=True, pick=['LPF', 'BTR'])
