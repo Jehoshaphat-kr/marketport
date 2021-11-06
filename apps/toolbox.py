@@ -103,12 +103,12 @@ def calc_filtered(data: pd.Series, window_or_cutoff :list, mode :str ='lowpass')
             y[k] = yk
         return pd.Series(data=y, index=data.index)
 
-    filter = __btf__ if mode == 'butter' else __lpf__
+    apps = __btf__ if mode == 'butter' else __lpf__
     mafs = pd.concat(
         objs={f'MAF{str(window).zfill(2)}D': data.rolling(window).mean() for window in window_or_cutoff},
         axis=1
     )
-    lpfs = {f'LPF{str(cutoff).zfill(2)}D': filter(cutoff=cutoff) for cutoff in window_or_cutoff}
+    lpfs = {f'LPF{str(cutoff).zfill(2)}D': apps(cutoff=cutoff) for cutoff in window_or_cutoff}
     return mafs.join(other=pd.concat(objs=lpfs, axis=1), how='left')
 
 def calc_trending(data: pd.DataFrame) -> pd.DataFrame:
@@ -834,8 +834,7 @@ class estimate(frame):
             invest = []
             for i, date in enumerate(frm.index):
                 data = frm.loc[date].to_dict()
-                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0 and data
-                    ['중기추세'] > 0 and data['중장기추세'] > 0:
+                if data['중기변화량'] > 0 and data['중장기변화량'] > 0 and data['중기모멘텀'] > 0 and data['중장기모멘텀'] > 0 and data['중기추세'] > 0 and data['중장기추세'] > 0:
                     invest.append('적합' if mode.endswith('all') else data[self.key])
                 else:
                     invest.append('부적합' if mode.endswith('all') else np.nan)
@@ -873,7 +872,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
 
-    from pykrx import stock
+    # from pykrx import stock
     # samples = []
     # for ind in ['1002', '1003', '2203']:
     # for ind in ['1003']:
