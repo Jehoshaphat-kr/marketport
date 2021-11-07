@@ -104,7 +104,9 @@ class toolkit:
         objs = {}
         for cutoff in windows:
             normal_cutoff = (252 / cutoff) / (252 / 2)
-            N, beta = kaiserord(ripple=50, width=50/(252 / 2))
+            # N, beta = kaiserord(ripple=50, width=5/(252 / 2))
+            # N, beta = kaiserord(ripple=50, width=normal_cutoff)
+            N, beta = kaiserord(ripple=8 if cutoff == 5 else cutoff, width=50/(252 / 2))
             taps = firwin(N, normal_cutoff, window=('kaiser', beta))
             objs[f'LPF{cutoff}D'] = pd.Series(data=lfilter(taps, 1.0, base), index=base.index)
         return pd.concat(objs=objs, axis=1)
@@ -326,10 +328,10 @@ class chart(asset):
 if __name__ == "__main__":
 
     myChart = chart(meta=stocks(), ticker='000660')
-    # myChart.guidance('BTR', show=True)
+    myChart.guidance('BTR', 'SMA', 'LPF', show=True)
 
     # verify = myChart.verifier(myChart.price['저가'], pick='btr', sample=100)
     # print(verify)
     # print(verify.describe())
-    myChart.guidance_stability(pick='lpf', show=True, sample=datetime(2014, 5, 30))
+    # myChart.guidance_stability(pick='lpf', show=True, sample=datetime(2014, 5, 30))
 
