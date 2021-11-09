@@ -182,11 +182,6 @@ class asset(toolkit):
         )
         self.price.index = pd.to_datetime(self.price.index)
 
-        self.sma = self.__sma__(base=self.price[self.filterby], windows=self.windows)
-        self.ema = self.__ema__(base=self.price[self.filterby], windows=self.windows + [12, 26])
-        self.iir = self.__iir__(base=self.price[self.filterby], windows=self.windows, order=1)
-        self.fir = self.__fir__(base=self.price[self.filterby], windows=self.windows)
-
         self._guide_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         return
@@ -199,7 +194,12 @@ class asset(toolkit):
         """
         if not self._guide_.empty:
             return self._guide_
-        self._guide_ = pd.concat(objs=[self.sma, self.ema, self.iir, self.fir], axis=1)
+        self._guide_ = pd.concat(objs=[
+            self.__sma__(base=self.price[self.filterby], windows=self.windows),
+            self.__ema__(base=self.price[self.filterby], windows=self.windows + [12, 26]),
+            self.__iir__(base=self.price[self.filterby], windows=self.windows, order=1),
+            self.__fir__(base=self.price[self.filterby], windows=self.windows)
+        ], axis=1)
         return self._guide_
 
     @property
@@ -211,7 +211,7 @@ class asset(toolkit):
         if not self._trend_.empty:
             return self._trend_
         dat = self.guide.copy()
-        objs = {
+        self._trend_ = pd.concat(objs={
             '중장기IIR': dat['IIR60D'] - dat['EMA120D'],
             '중기IIR': dat['IIR60D'] - dat['EMA60D'],
             '중단기IIR': dat['IIR20D'] - dat['EMA60D'],
@@ -223,12 +223,10 @@ class asset(toolkit):
             '중장기EMA': dat['EMA60D'] - dat['EMA120D'],
             '중단기EMA': dat['EMA20D'] - dat['EMA60D'],
             'MACD': dat['EMA12D'] - dat['EMA26D'],
-        }
-        frm = pd.concat(objs=objs, axis=1)
-        for col in frm.columns:
-            frm[f'd{col}'] = frm[col].diff()
-            frm[f'd2{col}'] = frm[col].diff().diff()
-        self._trend_ = frm.copy()
+        }, axis=1)
+        for col in self._trend_.columns:
+            self._trend_[f'd{col}'] = self._trend_[col].diff()
+            self._trend_[f'd2{col}'] = self._trend_[col].diff().diff()
         return self._trend_
 
 
@@ -264,9 +262,9 @@ class datum(asset):
             objs.append(data)
         return pd.DataFrame(data=objs)
 
-    def sampler(self, count:int=-1):
+    def answers(self, count:int=-1):
         """
-        필터 안정화 추정 학습용 데이터 샘플
+        필터 안정화 추정 학습용 데이터 샘플 (정답지)
         :param count:
         :return:
         """
@@ -419,7 +417,7 @@ class chart(asset):
     def momentum(self, show:bool=False) -> go.Figure:
         """
         추세선 모멘텀 차트
-        :param show: 
+        :param show: True::즉시 Plot
         :return: 
         """
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
@@ -439,47 +437,39 @@ class chart(asset):
                 ),
                 row=2 if col.startswith('d2') else 1, col=1
             )
-        fig.update_layout(
-            title=f'<b>{self.name}[{self.ticker}]</b> : 주가 모멘텀Momentum 차트',
-            plot_bgcolor='white',
-            annotations=[
-                dict(
-                    text="TDAT 내일모레, the-day-after-tomorrow.tistory.com",
-                    showarrow=False,
-                    xref="paper", yref="paper",
-                    x=0.005, y=-0.002
-                )
-            ],
-            legend=dict(traceorder='reversed'),
-            yaxis=dict(
-                title='정규값',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=True, zerolinecolor='grey',
-                showticklabels=True, autorange=True,
-            ),
-            yaxis2=dict(
-                title='정규값',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=True, zerolinecolor='grey',
-                showticklabels=True, autorange=True,
-            ),
-            xaxis=dict(
-                title='날짜',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=False,
-                showticklabels=True, autorange=True,
-                rangeselector=dict(
-                    buttons=list([
-                        dict(count=1, label="1m", step="month", stepmode="backward"),
-                        dict(count=3, label="3m", step="month", stepmode="backward"),
-                        dict(count=6, label="6m", step="month", stepmode="backward"),
-                        dict(count=1, label="YTD", step="year", stepmode="todate"),
-                        dict(count=1, label="1y", step="year", stepmode="backward"),
-                        dict(step="all")
-                    ])
-                )
-            ),
+        fig.update_layout(self.layout(
+            title='주가 모멘텀Momentum 차트',
+            ytitle='정규값',
+            xtitle='날짜'
+        ))
+        fig.update_yaxes(
+            title='정규값',
+            showgrid=True, gridcolor='lightgrey',
+            zeroline=True, zerolinecolor='grey',
+            showticklabels=True, autorange=True,
+            row=2, col=1
         )
+        fig.update_xaxes(
+            showgrid=True, gridcolor='lightgrey',
+            row=2, col=1
+        )
+        if show:
+            fig.show()
+        return fig
+
+    def scatter(self, col:str, td:int=20, perf:float=5.0, show:bool=False) -> go.Figure:
+        """
+        지표(추세, 변화량, 모멘텀, 합성 등) 대비 수익률 산포도
+        :param col: 지표 (데이터프레임 열 이름)
+        :param td: 목표 거래일(달성 기간)
+        :param perf: 목표 수익률
+        :param show: True::즉시 Plot
+        :return:
+        """
+        fig = go.Figure()
+        fig.update_layout(self.layout(
+            title=f'{col}-산포도'
+        ))
         if show:
             fig.show()
         return fig
