@@ -108,42 +108,45 @@ class toolkit:
         return pd.concat(objs=objs, axis=1)
 
     @staticmethod
-    def __ans__(data: pd.DataFrame, by: str = '종가', td: int = 20, yld: float = 5.0) -> pd.DataFrame:
+    def __ans__(data: pd.DataFrame, by: str = '종가') -> pd.DataFrame:
         """
         거래일(td) 기준 수익률(yld) 만족 지점 표기 데이터프레임
         :param data: 가격 정보 [시가, 저가, 고가, 종가] 포함 데이터프레임
         :param by: 기준 가격 정보
-        :param td: 목표 거래일
-        :param yld: 목표 수익률
         :return:
         """
         calc = data[['시가', '저가', '고가', '종가']].copy()
         pass_fail = [False] * len(calc)
-        for i in range(td, len(calc), 1):
-            afters = calc[i + 1:i + td + 1].values.flatten()
-            if afters[0] == 0:
-                continue
-
-            for after in afters[1:]:
-                if after == 0:
+        for td, yld in [(10, 3.0), (15, 4.0), (20, 5.0), (25, 6.0)]:
+            for i in range(len(calc)):
+                afters = calc[(i + 1) : (i + td + 1)].values.flatten()
+                if len(afters) < 4:
                     continue
-                if 100 * (after / afters[0] - 1) >= yld:
-                    pass_fail[i] = True
-                    break
-        calc['달성여부'] = pass_fail
+                if afters[0] == 0:
+                    continue
 
-        scale = ['#F63538', '#BF4045', '#8B444E', '#414554', '#35764E', '#2F9E4F', '#30CC5A']
-        thres = {
-            5: [-3, -2, -1, 1, 2, 3],
+                for after in afters[1:]:
+                    if after == 0:
+                        continue
+                    if 100 * (after / afters[0] - 1) >= yld:
+                        pass_fail[i] = True
+                        break
+            calc[f'GET-{td}TD{int(yld)}P'] = pass_fail
+
+        for td, bound in {
             10: [-3, -2, -1, 1, 2, 3],
             15: [-4, -2.5, -1, 1, 2.5, 4],
             20: [-5, -3, -1, 1, 3, 5],
-        }
-        for day, bound in thres.items():
-            calc[f'{day}TD수익률'] = round(100 * calc[by].pct_change(periods=day).shift(-day).fillna(0), 2)
-            cindex = [calc[f'{day}TD수익률'].min()] + bound + [calc[f'{day}TD수익률'].max()]
-            calc[f'{day}TD색상'] = pd.cut(calc[f'{day}TD수익률'], bins=cindex, labels=scale, right=True)
-            calc[f'{day}TD색상'].fillna(scale[0])
+            25: [-6, -4, -1.5, 1.5, 4, 6],
+        }.items():
+            calc[f'PERF-{td}TD'] = round(100 * calc[by].pct_change(periods=td).shift(-td).fillna(0), 2)
+            calc[f'COLOR-{td}TD'] = pd.cut(
+                calc[f'PERF-{td}TD'],
+                bins=[calc[f'PERF-{td}TD'].min()] + bound + [calc[f'PERF-{td}TD'].max()],
+                labels=['#F63538', '#BF4045', '#8B444E', '#414554', '#35764E', '#2F9E4F', '#30CC5A'],
+                right=True
+            )
+            calc[f'COLOR-{td}TD'].fillna('#F63538')
         return calc.drop(columns=['시가', '저가', '고가', '종가'])
 
 
@@ -185,6 +188,7 @@ class asset(toolkit):
 
         self._guide_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
+        self._refer_ = pd.DataFrame()
         return
 
     @property
@@ -229,6 +233,17 @@ class asset(toolkit):
             self._trend_[f'd{col}'] = self._trend_[col].diff()
             self._trend_[f'd2{col}'] = self._trend_[col].diff().diff()
         return self._trend_
+
+    @property
+    def reference(self) -> pd.DataFrame:
+        """
+        과거 수익률 정답지
+        :return:
+        """
+        if not self._refer_.empty:
+            return self._refer_
+        self._refer_ = self.__ans__(data=self.price, by='종가')
+        return self._refer_
 
 
 class datum(asset):
@@ -283,6 +298,15 @@ class datum(asset):
 
 
 class chart(asset):
+    @staticmethod
+    def date_form(date_list:np.array) -> np.array:
+        """
+        날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
+        :param date_list: 날짜 리스트
+        :return:
+        """
+        return [f'{d.year}/{d.month}/{d.day}' for d in date_list]
+
     def layout(self, title:str='', xtitle:str='날짜', ytitle:str='') -> go.Layout:
         """
         기본 차트 레이아웃
@@ -346,13 +370,13 @@ class chart(asset):
                 y=frm[col],
                 name=col,
                 visible=True if cond else 'legendonly',
-                meta=['{}/{}/{}'.format(d.year, d.month, d.day) for d in frm.index],
+                meta=self.date_form(date_list=frm.index),
                 hovertemplate=col + '<br>날짜: %{meta}<br>필터: %{y:,.2f}' + unit + '<extra></extra>'
             ))
         fig.add_trace(
             go.Candlestick(
                 x=self.price.index,
-                customdata=['{}/{}/{}'.format(d.year, d.month, d.day) for d in self.price.index],
+                customdata=self.date_form(date_list=self.price.index),
                 open=self.price['시가'],
                 high=self.price['고가'],
                 low=self.price['저가'],
@@ -370,7 +394,7 @@ class chart(asset):
             of.plot(fig, filename="chart-guidance.html", auto_open=False)
         return fig
 
-    def trendy(self, show:bool=False, save:bool=False) -> go.Figure:
+    def tendency(self, show:bool=False, save:bool=False) -> go.Figure:
         """
         주가 추세선 차트
         :param show: True::즉시 Plot
@@ -384,7 +408,6 @@ class chart(asset):
         )
         frm = self.trend.copy()
 
-        dform = ['{}/{}/{}'.format(d.year, d.month, d.day) for d in frm.index]
         for col in frm.columns:
             if col.startswith('d'):
                 continue
@@ -392,7 +415,7 @@ class chart(asset):
                 go.Scatter(
                     x=frm.index,
                     y=frm[col],
-                    customdata=dform,
+                    customdata=self.date_form(date_list=frm.index),
                     name=col,
                     mode='lines',
                     showlegend=True,
@@ -405,7 +428,7 @@ class chart(asset):
             go.Scatter(
                 x=self.price.index,
                 y=self.price[self.filterby],
-                meta=['{}/{}/{}'.format(d.year, d.month, d.day) for d in self.price.index],
+                meta=self.date_form(date_list=self.price.index),
                 name='종가',
                 mode='lines',
                 showlegend=True,
@@ -439,7 +462,7 @@ class chart(asset):
                     x=frm.index,
                     y=frm[col],
                     name=col,
-                    meta=['{}/{}/{}'.format(d.year, d.month, d.day) for d in frm.index],
+                    meta=self.date_form(date_list=frm.index),
                     visible=True if cond else 'legendonly',
                     hovertemplate=col + '<br>날짜: %{meta}<br>값:%{y:.4f}<extra></extra>'
                 ),
@@ -467,21 +490,59 @@ class chart(asset):
             of.plot(fig, filename="chart-momentum.html", auto_open=False)
         return fig
 
-    def scatter(self, col:str, td:int=20, perf:float=5.0, show:bool=False) -> go.Figure:
+    def scatter(self, label:str, td:int=20, show:bool=False, save:bool=False) -> go.Figure:
         """
         지표(추세, 변화량, 모멘텀, 합성 등) 대비 수익률 산포도
-        :param col: 지표 (데이터프레임 열 이름)
-        :param td: 목표 거래일(달성 기간)
-        :param perf: 목표 수익률
+        :param label: 지표 (데이터프레임 열 이름)
+        :param td: 목표 거래일(달성 기간) :: 10, 15, 20, 25
         :param show: True::즉시 Plot
+        :param save: True::로컬 저장
         :return:
         """
         fig = go.Figure()
-        fig.update_layout(self.layout(
-            title=f'{col}-산포도'
-        ))
+
+        frm = self.trend.join(other=self.reference, how='left')
+        ''' 임시 지표 개발소 '''
+        new = []
+        frm[label] = frm[label].pct_change().fillna(0).rolling(10).cumprod()
+
+
+        ''' ---------------- '''
+        cut = {10:3, 15:4, 20:5, 25:6}[td]
+        zc = frm[frm[label] >= 0].copy()
+        ps = frm[frm[f'PERF-{td}TD'] > cut].copy()
+        r_pass_zc = 100 * len(zc[zc[f'PERF-{td}TD'] > cut]) / len(zc)
+        r_zc_pass = 100 * len(ps[ps[label] > 0]) / len(ps)
+        fig.add_trace(
+            go.Scatter(
+                x=frm[label],
+                y=frm[f'PERF-{td}TD'],
+                mode='markers',
+                marker=dict(color=frm[f'COLOR-{td}TD']),
+                meta=self.date_form(date_list=frm.index),
+                hovertemplate='날짜:%{meta}<br>' + label + ':%{x:.2f}<br>수익률:%{y:.2f}%<extra></extra>'
+            )
+        )
+        fig.layout = self.layout(
+            title=f'{label}-수익률 산포도 :: ({frm.index[0].date()} ~ {frm.index[-1].date()})',
+            xtitle=f'{label}',
+            ytitle=f'{td}거래일 수익률[%]'
+        )
+        fig.update_layout(
+            xaxis=dict(zerolinewidth=2, zerolinecolor='black'),
+            yaxis=dict(zerolinewidth=2, zerolinecolor='black'),
+            annotations=[
+                dict(
+                    text=f'ACHIEVE / ZERO-CROSS (%): {r_pass_zc:.2f}%<br>ZERO-CROSS / ACHIEVE (%): {r_zc_pass:.2f}%<br>',
+                    showarrow=False,
+                    xref="paper", yref="paper", x=1.0, y=1.0, align="left"
+                )
+            ],
+        )
         if show:
             fig.show()
+        if save:
+            of.plot(fig, filename="chart-scatter.html", auto_open=False)
         return fig
 
 
@@ -490,8 +551,14 @@ if __name__ == "__main__":
     charter = chart(ticker='000660')
     print(f"{charter.name}({charter.ticker})")
     # charter.guidance(show=True)
-    # charter.trendy(show=True)
-    charter.momentum(show=False, save=True)
+    # charter.tendency(show=True)
+    # charter.momentum(show=True)
+    # charter.scatter(label='d중기FIR', td=20, show=True)
+
+    # charter.guidance(save=True)
+    # charter.tendency(save=True)
+    # charter.momentum(save=True)
+    charter.scatter(label='d중기FIR', td=20, save=True)
 
     # dater = datum(ticker='000660')
     # print(f"{dater.name}({dater.ticker})")
