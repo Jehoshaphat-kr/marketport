@@ -2,6 +2,7 @@ import os, random
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.offline as of
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
@@ -327,10 +328,11 @@ class chart(asset):
             ),
         )
 
-    def guidance(self, show:bool=False) -> go.Figure:
+    def guidance(self, show:bool=False, save:bool=False) -> go.Figure:
         """
         주가 가이던스(필터 선) 차트
         :param show: True::즉시 Plot
+        :param save: True::로컬 저장
         :return:
         """
         fig = go.Figure(layout=self.layout(title='주가 가이던스Guidance 차트', ytitle='가격(KRW)'))
@@ -364,12 +366,15 @@ class chart(asset):
         )
         if show:
             fig.show()
+        if save:
+            of.plot(fig, filename="chart-guidance.html", auto_open=False)
         return fig
 
-    def trendy(self, show:bool=False) -> go.Figure:
+    def trendy(self, show:bool=False, save:bool=False) -> go.Figure:
         """
         주가 추세선 차트
         :param show: True::즉시 Plot
+        :param save: True::로컬 저장
         :return:
         """
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -412,12 +417,15 @@ class chart(asset):
         fig.update_layout(yaxis=dict(zeroline=True, zerolinecolor='grey', zerolinewidth=1))
         if show:
             fig.show()
+        if save:
+            of.plot(fig, filename="chart-tendency.html", auto_open=False)
         return fig
     
-    def momentum(self, show:bool=False) -> go.Figure:
+    def momentum(self, show:bool=False, save:bool=False) -> go.Figure:
         """
         추세선 모멘텀 차트
         :param show: True::즉시 Plot
+        :param save: True::로컬 저장
         :return: 
         """
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
@@ -455,6 +463,8 @@ class chart(asset):
         )
         if show:
             fig.show()
+        if save:
+            of.plot(fig, filename="chart-momentum.html", auto_open=False)
         return fig
 
     def scatter(self, col:str, td:int=20, perf:float=5.0, show:bool=False) -> go.Figure:
@@ -481,7 +491,7 @@ if __name__ == "__main__":
     print(f"{charter.name}({charter.ticker})")
     # charter.guidance(show=True)
     # charter.trendy(show=True)
-    charter.momentum(show=True)
+    charter.momentum(show=False, save=True)
 
     # dater = datum(ticker='000660')
     # print(f"{dater.name}({dater.ticker})")
