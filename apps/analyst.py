@@ -278,7 +278,7 @@ class chart:
                 name=col,
                 visible=True if cond else 'legendonly',
                 meta=self.format(date_list=guide.index),
-                hovertemplate=col + '<br>날짜: %{meta}<br>'+ col if col == by else '필터' +': %{y:,.2f}' + unit + '<extra></extra>'
+                hovertemplate=col + '<br>날짜: %{meta}<br>'+ (col if col == by else '필터') +': %{y:,.2f}' + unit + '<extra></extra>'
             ))
         fig.add_trace(
             go.Candlestick(
