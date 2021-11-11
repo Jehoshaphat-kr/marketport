@@ -403,17 +403,28 @@ class chart:
             of.plot(fig, filename="chart-momentum.html", auto_open=False)
         return fig
 
-    def scatter(self, frame:pd.DataFrame, label:str, threshold:float=0, td:int=20,
-                show:bool=False, save:bool=False):
+    def scatter(
+            self,
+            series:pd.Series, frame:pd.DataFrame,
+            label:str='', threshold:float=0, td:int=20,
+            show:bool=False, save:bool=False
+    ):
         """
-        :param frame:
-        :param label:
-        :param threshold:
-        :param td:
-        :param show:
-        :param save:
+        지표 대비 수익률 상관관계 차트
+        :param series: 지표 1-D
+        :param frame: 지표와 수익률 정답지 포함 데이터프레임
+        :param label: (frame 입력 시) 지표 열(Column) 이름
+        :param threshold: 지표 기준 값
+        :param td: 거래일
+        :param show: True::즉시 Plot
+        :param save: True::로컬 저장
         :return:
         """
+        if not series.empty:
+            label = '지표'
+            series.name = label
+            frame = frame.join(series, how='left')
+
         fig = go.Figure(layout=self.layout(
             title=f'{label}-수익률 산포도 :: ({frame.index[0].date()} ~ {frame.index[-1].date()})',
             xtitle=f'{label}',
