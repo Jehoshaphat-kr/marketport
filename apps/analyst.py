@@ -189,7 +189,267 @@ class toolkit:
             frame[f'd{col}'] = frame[col].diff()
             frame[f'd2{col}'] = frame[col].diff().diff()
         return frame
+    
+class chart:
+    def __init__(self, name:str, ticker:str):
+        """
+        :param name: 종목명 
+        :param ticker: 종목코드
+        """
+        self.name = name
+        self.ticker = ticker
+        return
+    
+    @staticmethod
+    def format(date_list: np.array) -> np.array:
+        """
+        날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
+        :param date_list: 날짜 리스트
+        :return:
+        """
+        return [f'{d.year}/{d.month}/{d.day}' for d in date_list]
 
+    def layout(self, title:str = '', xtitle:str='날짜', ytitle:str='') -> go.Layout:
+        """
+        기본 차트 레이아웃
+        :param title: 차트 제목 
+        :param xtitle: x축 이름
+        :param ytitle: y축 이름
+        :return: 
+        """
+        return go.Layout(
+            title=f'<b>{self.name}[{self.ticker}]</b> : {title}',
+            plot_bgcolor='white',
+            annotations=[
+                dict(
+                    text="TDAT 내일모레, the-day-after-tomorrow.tistory.com",
+                    showarrow=False,
+                    xref="paper", yref="paper",
+                    x=0.005, y=-0.002
+                )
+            ],
+            legend=dict(traceorder='reversed'),
+            yaxis=dict(
+                title=f'{ytitle}',
+                showgrid=True, gridcolor='lightgrey',
+                zeroline=False,
+                showticklabels=True, autorange=True,
+            ),
+            xaxis=dict(
+                title=f'{xtitle}',
+                showgrid=True, gridcolor='lightgrey',
+                zeroline=False,
+                showticklabels=True, autorange=True,
+                rangeselector=dict(
+                    buttons=list([
+                        dict(count=1, label="1m", step="month", stepmode="backward"),
+                        dict(count=3, label="3m", step="month", stepmode="backward"),
+                        dict(count=6, label="6m", step="month", stepmode="backward"),
+                        dict(count=1, label="YTD", step="year", stepmode="todate"),
+                        dict(count=1, label="1y", step="year", stepmode="backward"),
+                        dict(step="all")
+                    ])
+                )
+            ),
+            xaxis_rangeslider=dict(visible=False)
+        )
+
+    def guidance(self, frame:pd.DataFrame, by:str, show:bool=False, save:bool=False) -> go.Figure:
+        """
+        주가 가이던스(필터 선) 차트
+        :param frame: [시가, 고가, 저가, 종가, SMA(n)D, EMA(n)D, FIR(n)D, IIR(n)D] 포함 프레임
+        :param by: 시가/고가/저가/종가 중 택1
+        :param show: True::즉시 Plot
+        :param save: True::로컬 저장
+        :return:
+        """
+        fig = go.Figure(layout=self.layout(title='주가 가이던스Guidance 차트', ytitle='가격(KRW)'))
+        if '거래량' in frame.columns:
+            frame.drop(columns=['거래량'], inplace=True)
+        price = frame[['시가', '고가', '저가', '종가']].copy()
+        guide = frame.drop(columns=price.columns).copy().join(price[by], how='left')
+
+        for col in guide.columns:
+            cond = col[-3:] == '60D' or col == by
+            unit = '[-]' if col.endswith('D') else '원'
+            fig.add_trace(go.Scatter(
+                x=guide.index,
+                y=guide[col],
+                name=col,
+                visible=True if cond else 'legendonly',
+                meta=self.format(date_list=guide.index),
+                hovertemplate=col + '<br>날짜: %{meta}<br>'+ col if col == by else '필터' +': %{y:,.2f}' + unit + '<extra></extra>'
+            ))
+        fig.add_trace(
+            go.Candlestick(
+                x=price.index,
+                customdata=self.format(date_list=price.index),
+                open=price['시가'],
+                high=price['고가'],
+                low=price['저가'],
+                close=price['종가'],
+                increasing_line=dict(color='red'),
+                decreasing_line=dict(color='blue'),
+                name='일봉',
+                visible='legendonly',
+                showlegend=True,
+            )
+        )
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-guidance.html", auto_open=False)
+        return fig
+
+    def tendency(self, frame:pd.DataFrame, by:str, show:bool=False, save:bool=False) -> go.Figure:
+        """
+        주가 추세선 차트
+        :param frame: [시가, 고가, 저가, 종가, *args]
+        :param by: 시가/고가/저가/종가 중 택1
+        :param show: True::즉시 Plot
+        :param save: True::로컬 저장
+        :return:
+        """
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        if '거래량' in frame.columns:
+            frame.drop(columns=['거래량'], inplace=True)
+        price = frame[['시가', '고가', '저가', '종가']].copy()
+        trend = frame.drop(columns=price.columns).copy()
+
+        for col in trend.columns:
+            if col.startswith('d'):
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=trend.index,
+                    y=trend[col],
+                    customdata=self.format(date_list=trend.index),
+                    name=col,
+                    mode='lines',
+                    showlegend=True,
+                    visible=True if col.startswith('중장') else 'legendonly',
+                    hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
+                ),
+                secondary_y=False
+            )
+        fig.add_trace(
+            go.Scatter(
+                x=price.index,
+                y=price[by],
+                meta=self.format(date_list=price.index),
+                name='종가',
+                mode='lines',
+                showlegend=True,
+                visible=True,
+                hovertemplate='날짜:%{meta}<br>' + by + ':%{y:,}원<extra></extra>',
+            ),
+            secondary_y=True
+        )
+        fig.update_layout(self.layout(
+            title='주가 추세Trend 차트',
+            ytitle='추세값[-]',
+        ))
+        fig.update_layout(yaxis=dict(zeroline=True, zerolinecolor='grey', zerolinewidth=1))
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-tendency.html", auto_open=False)
+        return fig
+
+    def momentum(self, frame:pd.DataFrame, show: bool = False, save: bool = False) -> go.Figure:
+        """
+        추세선 모멘텀 차트
+        :param frame: [*args] 추세선/모멘텀 데이터
+        :param show: True::즉시 Plot
+        :param save: True::로컬 저장
+        :return: 
+        """
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
+
+        frm = frame[60:].copy()
+        cols = [col for col in frm.columns if col.startswith('d')]
+        for col in cols:
+            cond = (col.endswith('FIR') or col.endswith('IIR')) and '중기' in col
+            fig.add_trace(
+                go.Scatter(
+                    x=frm.index,
+                    y=frm[col],
+                    name=col,
+                    meta=self.format(date_list=frm.index),
+                    visible=True if cond else 'legendonly',
+                    hovertemplate=col + '<br>날짜: %{meta}<br>값:%{y:.4f}<extra></extra>'
+                ),
+                row=2 if col.startswith('d2') else 1, col=1
+            )
+        fig.update_layout(self.layout(
+            title='주가 모멘텀Momentum 차트',
+            ytitle='정규값',
+            xtitle='날짜'
+        ))
+        fig.update_yaxes(
+            title='정규값',
+            showgrid=True, gridcolor='lightgrey',
+            zeroline=True, zerolinecolor='grey',
+            showticklabels=True, autorange=True,
+            row=2, col=1
+        )
+        fig.update_xaxes(
+            showgrid=True, gridcolor='lightgrey',
+            row=2, col=1
+        )
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-momentum.html", auto_open=False)
+        return fig
+
+    def scatter(self, frame:pd.DataFrame, label:str, threshold:float=0, td:int=20,
+                show:bool=False, save:bool=False):
+        """
+        :param frame:
+        :param label:
+        :param threshold:
+        :param td:
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = go.Figure(layout=self.layout(
+            title=f'{label}-수익률 산포도 :: ({frame.index[0].date()} ~ {frame.index[-1].date()})',
+            xtitle=f'{label}',
+            ytitle=f'{td}거래일 수익률[%]'
+        ))
+        fig.add_trace(
+            go.Scatter(
+                x=frame[label],
+                y=frame[f'PERF-{td}TD'],
+                mode='markers',
+                marker=dict(color=frame[f'COLOR-{td}TD']),
+                meta=self.format(date_list=frame.index),
+                hovertemplate='날짜:%{meta}<br>' + label + ':%{x:.2f}<br>수익률:%{y:.2f}%<extra></extra>'
+            )
+        )
+        cut = {10:3, 15:4, 20:5, 25:6}[td]
+        zc = frame[frame[label] >= threshold].copy()
+        ps = frame[frame[f'PERF-{td}TD'] > cut].copy()
+        r_pass_zc = 100 * len(zc[zc[f'PERF-{td}TD'] > cut]) / len(zc)
+        r_zc_pass = 100 * len(ps[ps[label] > threshold]) / len(ps)
+        fig.update_layout(
+            xaxis=dict(zerolinewidth=2, zerolinecolor='black'),
+            yaxis=dict(zerolinewidth=2, zerolinecolor='black'),
+            annotations=[
+                dict(
+                    text=f'ACHIEVE / ZERO-CROSS (%): {r_pass_zc:.2f}%<br>ZERO-CROSS / ACHIEVE (%): {r_zc_pass:.2f}%<br>',
+                    showarrow=False,
+                    xref="paper", yref="paper", x=1.0, y=1.0, align="left"
+                )
+            ],
+        )
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-scatter.html", auto_open=False)
+        return fig
 
 class asset(toolkit):
     def __init__(self, **kwargs):
@@ -197,7 +457,6 @@ class asset(toolkit):
         :param ticker: 종목코드
         :param kwargs:
         | KEYWORDS | TYPE |               COMMENT |                         POSSIBLE INPUTS |              DEFAULT |
-        |     meta | pd.D |       외부 메타데이터 | columns=[종목코드, 종목명] 데이터프레임 |                *필수 |
         |   ticker |  str |              종목코드 |                                       - |               005930 |
         |      src |  str |      가격 데이터 출처 |                       online or offline |               online |
         |  windows | list | 필터 적용 거래일 모음 |                    [int, int, ..., int] | [5, 10, 20, 60, 120] |
@@ -340,315 +599,28 @@ class datum(asset):
         return pd.DataFrame(data=objs, index=samples)
 
 
-class chart(asset):
-    @staticmethod
-    def date_form(date_list:np.array) -> np.array:
-        """
-        날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
-        :param date_list: 날짜 리스트
-        :return:
-        """
-        return [f'{d.year}/{d.month}/{d.day}' for d in date_list]
-
-    def layout(self, title:str='', xtitle:str='날짜', ytitle:str='') -> go.Layout:
-        """
-        기본 차트 레이아웃
-        :param title: 차트 제목 
-        :param xtitle: x축 이름
-        :param ytitle: y축 이름
-        :param y2title: 제2 y축 이름
-        :return: 
-        """
-        return go.Layout(
-            title=f'<b>{self.name}[{self.ticker}]</b> : {title}',
-            plot_bgcolor='white',
-            annotations=[
-                dict(
-                    text="TDAT 내일모레, the-day-after-tomorrow.tistory.com",
-                    showarrow=False,
-                    xref="paper", yref="paper",
-                    x=0.005, y=-0.002
-                )
-            ],
-            legend=dict(traceorder='reversed'),
-            yaxis=dict(
-                title=f'{ytitle}',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=False,
-                showticklabels=True, autorange=True,
-            ),
-            xaxis=dict(
-                title=f'{xtitle}',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=False,
-                showticklabels=True, autorange=True,
-                rangeselector=dict(
-                    buttons=list([
-                        dict(count=1, label="1m", step="month", stepmode="backward"),
-                        dict(count=3, label="3m", step="month", stepmode="backward"),
-                        dict(count=6, label="6m", step="month", stepmode="backward"),
-                        dict(count=1, label="YTD", step="year", stepmode="todate"),
-                        dict(count=1, label="1y", step="year", stepmode="backward"),
-                        dict(step="all")
-                    ])
-                )
-            ),
-            xaxis_rangeslider=dict(visible=False)
-        )
-
-    def guidance(self, show:bool=False, save:bool=False) -> go.Figure:
-        """
-        주가 가이던스(필터 선) 차트
-        :param show: True::즉시 Plot
-        :param save: True::로컬 저장
-        :return:
-        """
-        fig = go.Figure(layout=self.layout(title='주가 가이던스Guidance 차트', ytitle='가격(KRW)'))
-        frm = self.guide.copy()
-        frm = frm.join(self.price.drop(columns=['거래량']), how='left')
-        for col in frm.columns:
-            cond = col[-3:] == '60D' or col == self.filterby
-            unit = '[-]' if col.endswith('D') else '원'
-            fig.add_trace(go.Scatter(
-                x=frm.index,
-                y=frm[col],
-                name=col,
-                visible=True if cond else 'legendonly',
-                meta=self.date_form(date_list=frm.index),
-                hovertemplate=col + '<br>날짜: %{meta}<br>필터: %{y:,.2f}' + unit + '<extra></extra>'
-            ))
-        fig.add_trace(
-            go.Candlestick(
-                x=self.price.index,
-                customdata=self.date_form(date_list=self.price.index),
-                open=self.price['시가'],
-                high=self.price['고가'],
-                low=self.price['저가'],
-                close=self.price['종가'],
-                increasing_line=dict(color='red'),
-                decreasing_line=dict(color='blue'),
-                name='일봉',
-                visible='legendonly',
-                showlegend=True,
-            )
-        )
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename="chart-guidance.html", auto_open=False)
-        return fig
-
-    def tendency(self, show:bool=False, save:bool=False) -> go.Figure:
-        """
-        주가 추세선 차트
-        :param show: True::즉시 Plot
-        :param save: True::로컬 저장
-        :return:
-        """
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        frm = self.trend.copy()
-
-        for col in frm.columns:
-            if col.startswith('d'):
-                continue
-            fig.add_trace(
-                go.Scatter(
-                    x=frm.index,
-                    y=frm[col],
-                    customdata=self.date_form(date_list=frm.index),
-                    name=col,
-                    mode='lines',
-                    showlegend=True,
-                    visible=True if col.startswith('중장') else 'legendonly',
-                    hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
-                ),
-                secondary_y=False
-            )
-        fig.add_trace(
-            go.Scatter(
-                x=self.price.index,
-                y=self.price[self.filterby],
-                meta=self.date_form(date_list=self.price.index),
-                name='종가',
-                mode='lines',
-                showlegend=True,
-                visible=True,
-                hovertemplate='날짜:%{meta}<br>' + self.filterby + ':%{y:,}원<extra></extra>',
-            ),
-            secondary_y=True
-        )
-        fig.update_layout(self.layout(
-            title='주가 추세Trend 차트',
-            ytitle='추세값[-]',
-        ))
-        fig.update_layout(yaxis=dict(zeroline=True, zerolinecolor='grey', zerolinewidth=1))
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename="chart-tendency.html", auto_open=False)
-        return fig
-    
-    def momentum(self, show:bool=False, save:bool=False) -> go.Figure:
-        """
-        추세선 모멘텀 차트
-        :param show: True::즉시 Plot
-        :param save: True::로컬 저장
-        :return: 
-        """
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
-
-        frm = self.trend[60:].copy()
-        cols = [col for col in frm.columns if col.startswith('d')]
-        for col in cols:
-            cond = (col.endswith('FIR') or col.endswith('IIR')) and '중기' in col
-            fig.add_trace(
-                go.Scatter(
-                    x=frm.index,
-                    y=frm[col],
-                    name=col,
-                    meta=self.date_form(date_list=frm.index),
-                    visible=True if cond else 'legendonly',
-                    hovertemplate=col + '<br>날짜: %{meta}<br>값:%{y:.4f}<extra></extra>'
-                ),
-                row=2 if col.startswith('d2') else 1, col=1
-            )
-        fig.update_layout(self.layout(
-            title='주가 모멘텀Momentum 차트',
-            ytitle='정규값',
-            xtitle='날짜'
-        ))
-        fig.update_yaxes(
-            title='정규값',
-            showgrid=True, gridcolor='lightgrey',
-            zeroline=True, zerolinecolor='grey',
-            showticklabels=True, autorange=True,
-            row=2, col=1
-        )
-        fig.update_xaxes(
-            showgrid=True, gridcolor='lightgrey',
-            row=2, col=1
-        )
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename="chart-momentum.html", auto_open=False)
-        return fig
-
-    def scatter(self, label:str, td:int=20, show:bool=False, save:bool=False) -> go.Figure:
-        """
-        지표(추세, 변화량, 모멘텀, 합성 등) 대비 수익률 산포도
-        :param label: 지표 (데이터프레임 열 이름)
-        :param td: 목표 거래일(달성 기간) :: 10, 15, 20, 25
-        :param show: True::즉시 Plot
-        :param save: True::로컬 저장
-        :return:
-        """
-        fig = go.Figure()
-
-        frm = self.trend.join(other=self.reference, how='left')
-        ''' 임시 지표 개발소 '''
-        val = []
-        for date in self.price.index:
-            score = 0
-            base = self.price[self.price.index <= date].copy()
-            if len(base) < 10:
-                val.append(score)
-                continue
-
-            guide = self.__trd__(base=base[self.filterby], windows=self.windows)['중기IIR']
-            calc = guide.iloc[-10:]
-            # for col in calc.columns:
-            #     if not '중기' in col:
-            #         continue
-            series = calc.values
-            ramp = [series.min() + n * (series.max() - series.min()) / 9 for n in range(10)]
-            slope, intercept, r_value, p_value, std_err = linregress(np.array(ramp), series)
-            if r_value < 0:
-                score = -1
-            else:
-                score = r_value ** 2
-
-            # guide = self.guide.copy()
-            # ramp = [10*n for n in range(11)]
-            # trend = self.__trd__(base=base[self.filterby], windows=self.windows)
-
-
-            # calc = trend[-10:]
-            # for ind in ['d중기IIR', 'd중장기EMA']:
-            #     score += (np.sign(calc[ind].values[-5:]) * np.array([32, 25, 18, 14, 11])).sum()
-            #     score += (np.sign(calc[ind].pct_change().values[-5:]) * np.array([32, 25, 18, 14, 11])).sum()
-
-            val.append(score)
-        sr = pd.Series(data=val, index=self.price.index, name='ind')
-        frm = frm.join(sr, how='left')
-
-        ''' ---------------- '''
-        cut = {10:3, 15:4, 20:5, 25:6}[td]
-        # zc = frm[frm[label] >= 0].copy()
-        zc = frm[frm['ind'] >= 0].copy()
-        ps = frm[frm[f'PERF-{td}TD'] > cut].copy()
-        r_pass_zc = 100 * len(zc[zc[f'PERF-{td}TD'] > cut]) / len(zc)
-        # r_zc_pass = 100 * len(ps[ps[label] > 0]) / len(ps)
-        r_zc_pass = 100 * len(ps[ps['ind'] > 0]) / len(ps)
-
-        # fig.add_trace(
-        #     go.Scatter(
-        #         # x=frm[label],
-        #         x=frm['ind'],
-        #         y=frm[f'PERF-{td}TD'],
-        #         mode='markers',
-        #         marker=dict(color=frm[f'COLOR-{td}TD']),
-        #         meta=self.date_form(date_list=frm.index),
-        #         hovertemplate='날짜:%{meta}<br>' + label + ':%{x:.2f}<br>수익률:%{y:.2f}%<extra></extra>'
-        #     )
-        # )
-        fig.add_trace(
-            go.Scatter(
-                # x=frm[label],
-                x=frm['ind'],
-                y=[1 if c else 0 for c in frm[f'GET-{td}TD5P']],
-                mode='markers',
-                marker=dict(color=frm[f'COLOR-{td}TD']),
-                meta=self.date_form(date_list=frm.index),
-                hovertemplate='날짜:%{meta}<br>' + label + ':%{x:.2f}<br>수익률:%{y:.2f}%<extra></extra>'
-            )
-        )
-        fig.layout = self.layout(
-            title=f'{label}-수익률 산포도 :: ({frm.index[0].date()} ~ {frm.index[-1].date()})',
-            xtitle=f'{label}',
-            ytitle=f'{td}거래일 수익률[%]'
-        )
-        fig.update_layout(
-            xaxis=dict(zerolinewidth=2, zerolinecolor='black'),
-            yaxis=dict(zerolinewidth=2, zerolinecolor='black'),
-            annotations=[
-                dict(
-                    text=f'ACHIEVE / ZERO-CROSS (%): {r_pass_zc:.2f}%<br>ZERO-CROSS / ACHIEVE (%): {r_zc_pass:.2f}%<br>',
-                    showarrow=False,
-                    xref="paper", yref="paper", x=1.0, y=1.0, align="left"
-                )
-            ],
-        )
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename="chart-scatter.html", auto_open=False)
-        return fig
-
-
 if __name__ == "__main__":
 
-    charter = chart(ticker='000660')
-    print(f"{charter.name}({charter.ticker})")
-    # charter.guidance(show=True)
-    # charter.tendency(show=True)
-    # charter.momentum(show=True)
-    # charter.scatter(label='d중기FIR', td=20, show=True)
+    stock = asset(ticker='000660', src='offline')
+    print(f"{stock.name}({stock.ticker})")
 
-    # charter.guidance(save=True)
-    # charter.tendency(save=True)
-    # charter.momentum(save=True)
-    charter.scatter(label='d중기IIR', td=20, save=True)
+    display = chart(name=stock.name, ticker=stock.ticker)
+    display.guidance(
+        frame=pd.concat([stock.price, stock.guide], axis=1), by=stock.filterby,
+        show=False, save=True
+    )
+    display.tendency(
+        frame=pd.concat([stock.price, stock.trend], axis=1), by=stock.filterby,
+        show=False, save=True
+    )
+    display.momentum(
+        frame=pd.concat([stock.price, stock.trend], axis=1),
+        show=False, save=True
+    )
+    display.scatter(
+        frame=pd.concat([stock.reference, stock.trend], axis=1), label='d중기IIR',
+        threshold=0, td=20, show=False, save=True
+    )
 
     # dater = datum(ticker='000660')
     # print(f"{dater.name}({dater.ticker})")
