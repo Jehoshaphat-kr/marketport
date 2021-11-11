@@ -6,6 +6,7 @@ import plotly.offline as of
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
+from scipy.stats import linregress
 
 
 __root__ = os.path.dirname(os.path.dirname(__file__))
@@ -76,7 +77,7 @@ class toolkit:
         objs = {}
         for cutoff in windows:
             normal_cutoff = (252 / cutoff) / (252 / 2)
-            coeff_a, coeff_b = butter(order, normal_cutoff, btype='low', analog=False)
+            coeff_a, coeff_b = butter(N=order, Wn=normal_cutoff, btype='lowpass', analog=False, output='ba')
             objs[f'IIR{cutoff}D'] = pd.Series(data=filtfilt(coeff_a, coeff_b, base), index=base.index)
         return pd.concat(objs=objs, axis=1)
 
@@ -149,6 +150,46 @@ class toolkit:
             calc[f'COLOR-{td}TD'].fillna('#F63538')
         return calc.drop(columns=['시가', '저가', '고가', '종가'])
 
+    def __gid__(self, base:pd.Series, windows:list):
+        """
+        일반 주가 가이던스 분석
+        :param base: 필터 대상 시계열 데이터(주가)
+        :param windows: 필터 대상 데이터 개수 모음
+        :return:
+        """
+        return pd.concat(objs=[
+            self.__sma__(base=base, windows=windows),
+            self.__ema__(base=base, windows=windows + [12, 26]),
+            self.__iir__(base=base, windows=windows, order=1),
+            self.__fir__(base=base, windows=windows)
+        ], axis=1)
+
+    def __trd__(self, base:pd.Series, windows:list):
+        """
+        일반 주가 추세 분석
+        :param base:
+        :return:
+        """
+        cumulate = 100 * ((base.pct_change().fillna(0) + 1).cumprod() - 1)
+        rebase = self.__gid__(base=cumulate, windows=windows)
+        frame = pd.concat(objs={
+            '중장기IIR': rebase['IIR60D'] - rebase['EMA120D'],
+            '중기IIR': rebase['IIR60D'] - rebase['EMA60D'],
+            '중단기IIR': rebase['IIR20D'] - rebase['EMA60D'],
+            '중장기FIR': rebase['FIR60D'] - rebase['EMA120D'],
+            '중기FIR': rebase['FIR60D'] - rebase['EMA60D'],
+            '중단기FIR': rebase['FIR20D'] - rebase['EMA60D'],
+            '중장기SMA': rebase['SMA60D'] - rebase['SMA120D'],
+            '중단기SMA': rebase['SMA20D'] - rebase['SMA60D'],
+            '중장기EMA': rebase['EMA60D'] - rebase['EMA120D'],
+            '중단기EMA': rebase['EMA20D'] - rebase['EMA60D'],
+            'MACD': rebase['EMA12D'] - rebase['EMA26D'],
+        }, axis=1)
+        for col in frame.columns:
+            frame[f'd{col}'] = frame[col].diff()
+            frame[f'd2{col}'] = frame[col].diff().diff()
+        return frame
+
 
 class asset(toolkit):
     def __init__(self, **kwargs):
@@ -199,12 +240,7 @@ class asset(toolkit):
         """
         if not self._guide_.empty:
             return self._guide_
-        self._guide_ = pd.concat(objs=[
-            self.__sma__(base=self.price[self.filterby], windows=self.windows),
-            self.__ema__(base=self.price[self.filterby], windows=self.windows + [12, 26]),
-            self.__iir__(base=self.price[self.filterby], windows=self.windows, order=1),
-            self.__fir__(base=self.price[self.filterby], windows=self.windows)
-        ], axis=1)
+        self._guide_ = self.__gid__(base=self.price[self.filterby], windows=self.windows)
         return self._guide_
 
     @property
@@ -215,23 +251,7 @@ class asset(toolkit):
         """
         if not self._trend_.empty:
             return self._trend_
-        dat = self.guide.copy()
-        self._trend_ = pd.concat(objs={
-            '중장기IIR': dat['IIR60D'] - dat['EMA120D'],
-            '중기IIR': dat['IIR60D'] - dat['EMA60D'],
-            '중단기IIR': dat['IIR20D'] - dat['EMA60D'],
-            '중장기FIR': dat['FIR60D'] - dat['EMA120D'],
-            '중기FIR': dat['FIR60D'] - dat['EMA60D'],
-            '중단기FIR': dat['FIR20D'] - dat['EMA60D'],
-            '중장기SMA': dat['SMA60D'] - dat['SMA120D'],
-            '중단기SMA': dat['SMA20D'] - dat['SMA60D'],
-            '중장기EMA': dat['EMA60D'] - dat['EMA120D'],
-            '중단기EMA': dat['EMA20D'] - dat['EMA60D'],
-            'MACD': dat['EMA12D'] - dat['EMA26D'],
-        }, axis=1)
-        for col in self._trend_.columns:
-            self._trend_[f'd{col}'] = self._trend_[col].diff()
-            self._trend_[f'd2{col}'] = self._trend_[col].diff().diff()
+        self._trend_ = self.__trd__(base=self.price[self.filterby], windows=self.windows)
         return self._trend_
 
     @property
@@ -245,6 +265,29 @@ class asset(toolkit):
         self._refer_ = self.__ans__(data=self.price, by='종가')
         return self._refer_
 
+    def rebase(self):
+        """
+        (백테스트) 과거 시점 필터 데이터 재구성
+        :return:
+        """
+        val = []
+        for date in self.price.index:
+            base = self.price[self.price.index <= date].copy()
+            trend = self.__trd__(base=base[self.filterby], windows=self.windows)
+            if len(base) < 10:
+                val.append(0)
+                continue
+
+            calc = trend[-10:]
+            sharpe = ((calc[-1]/calc[0])-1)/(np.log(calc.pct_change()).std() * 252 ** 0.5)
+            val.append(sharpe)
+
+    def adequacy(self):
+        """
+        투자 적합성 판정
+        :return:
+        """
+        return
 
 class datum(asset):
     def oscillation(self, date:datetime=None, filter_type:str='iir', gap:int=60) -> pd.DataFrame:
@@ -350,6 +393,7 @@ class chart(asset):
                     ])
                 )
             ),
+            xaxis_rangeslider=dict(visible=False)
         )
 
     def guidance(self, show:bool=False, save:bool=False) -> go.Figure:
@@ -402,10 +446,6 @@ class chart(asset):
         :return:
         """
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.layout = self.layout(
-            title='주가 추세Trend 차트',
-            ytitle='추세값[-]',
-        )
         frm = self.trend.copy()
 
         for col in frm.columns:
@@ -437,6 +477,10 @@ class chart(asset):
             ),
             secondary_y=True
         )
+        fig.update_layout(self.layout(
+            title='주가 추세Trend 차트',
+            ytitle='추세값[-]',
+        ))
         fig.update_layout(yaxis=dict(zeroline=True, zerolinecolor='grey', zerolinewidth=1))
         if show:
             fig.show()
@@ -503,20 +547,66 @@ class chart(asset):
 
         frm = self.trend.join(other=self.reference, how='left')
         ''' 임시 지표 개발소 '''
-        new = []
-        frm[label] = frm[label].pct_change().fillna(0).rolling(10).cumprod()
+        val = []
+        for date in self.price.index:
+            score = 0
+            base = self.price[self.price.index <= date].copy()
+            if len(base) < 10:
+                val.append(score)
+                continue
 
+            guide = self.__trd__(base=base[self.filterby], windows=self.windows)['중기IIR']
+            calc = guide.iloc[-10:]
+            # for col in calc.columns:
+            #     if not '중기' in col:
+            #         continue
+            series = calc.values
+            ramp = [series.min() + n * (series.max() - series.min()) / 9 for n in range(10)]
+            slope, intercept, r_value, p_value, std_err = linregress(np.array(ramp), series)
+            if r_value < 0:
+                score = -1
+            else:
+                score = r_value ** 2
+
+            # guide = self.guide.copy()
+            # ramp = [10*n for n in range(11)]
+            # trend = self.__trd__(base=base[self.filterby], windows=self.windows)
+
+
+            # calc = trend[-10:]
+            # for ind in ['d중기IIR', 'd중장기EMA']:
+            #     score += (np.sign(calc[ind].values[-5:]) * np.array([32, 25, 18, 14, 11])).sum()
+            #     score += (np.sign(calc[ind].pct_change().values[-5:]) * np.array([32, 25, 18, 14, 11])).sum()
+
+            val.append(score)
+        sr = pd.Series(data=val, index=self.price.index, name='ind')
+        frm = frm.join(sr, how='left')
 
         ''' ---------------- '''
         cut = {10:3, 15:4, 20:5, 25:6}[td]
-        zc = frm[frm[label] >= 0].copy()
+        # zc = frm[frm[label] >= 0].copy()
+        zc = frm[frm['ind'] >= 0].copy()
         ps = frm[frm[f'PERF-{td}TD'] > cut].copy()
         r_pass_zc = 100 * len(zc[zc[f'PERF-{td}TD'] > cut]) / len(zc)
-        r_zc_pass = 100 * len(ps[ps[label] > 0]) / len(ps)
+        # r_zc_pass = 100 * len(ps[ps[label] > 0]) / len(ps)
+        r_zc_pass = 100 * len(ps[ps['ind'] > 0]) / len(ps)
+
+        # fig.add_trace(
+        #     go.Scatter(
+        #         # x=frm[label],
+        #         x=frm['ind'],
+        #         y=frm[f'PERF-{td}TD'],
+        #         mode='markers',
+        #         marker=dict(color=frm[f'COLOR-{td}TD']),
+        #         meta=self.date_form(date_list=frm.index),
+        #         hovertemplate='날짜:%{meta}<br>' + label + ':%{x:.2f}<br>수익률:%{y:.2f}%<extra></extra>'
+        #     )
+        # )
         fig.add_trace(
             go.Scatter(
-                x=frm[label],
-                y=frm[f'PERF-{td}TD'],
+                # x=frm[label],
+                x=frm['ind'],
+                y=[1 if c else 0 for c in frm[f'GET-{td}TD5P']],
                 mode='markers',
                 marker=dict(color=frm[f'COLOR-{td}TD']),
                 meta=self.date_form(date_list=frm.index),
@@ -558,7 +648,7 @@ if __name__ == "__main__":
     # charter.guidance(save=True)
     # charter.tendency(save=True)
     # charter.momentum(save=True)
-    charter.scatter(label='d중기FIR', td=20, save=True)
+    charter.scatter(label='d중기IIR', td=20, save=True)
 
     # dater = datum(ticker='000660')
     # print(f"{dater.name}({dater.ticker})")
