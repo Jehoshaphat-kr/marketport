@@ -271,14 +271,14 @@ class chart:
 
         for col in guide.columns:
             cond = col[-3:] == '60D' or col == by
-            unit = '[-]' if col.endswith('D') else '원'
+            hover = col + ': %{y:,}원' if col == by else '필터: %{y:,.2f}'
             fig.add_trace(go.Scatter(
                 x=guide.index,
                 y=guide[col],
                 name=col,
                 visible=True if cond else 'legendonly',
                 meta=self.format(date_list=guide.index),
-                hovertemplate=col + '<br>날짜: %{meta}<br>'+ (col if col == by else '필터') +': %{y:,.2f}' + unit + '<extra></extra>'
+                hovertemplate=hover + '<br>날짜: %{meta}<extra></extra>'
             ))
         fig.add_trace(
             go.Candlestick(
