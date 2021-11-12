@@ -405,7 +405,7 @@ class chart:
 
     def scatter(
             self,
-            series:pd.Series, frame:pd.DataFrame,
+            frame:pd.DataFrame, series:pd.Series=pd.DataFrame(),
             label:str='', threshold:float=0, td:int=20,
             show:bool=False, save:bool=False
     ):
