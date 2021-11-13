@@ -272,7 +272,7 @@ class chart:
 
         for col in guide.columns:
             cond = col[-3:] == '60D' or col == by
-            hover = col + ': %{y:,}원' if col == by else '필터: %{y:,.2f}'
+            hover = col + ': %{y:,}원' if col == by else col + ': %{y:,.2f}'
             fig.add_trace(go.Scatter(
                 x=guide.index,
                 y=guide[col],
@@ -537,10 +537,11 @@ class asset(toolkit):
         return self._refer_
 
 
-class filters(asset):
-    def response(self, date:datetime=None, filter_type:str='iir', gap:int=60) -> pd.DataFrame:
+class filters(toolkit):
+    def response(self, price:pd.Series, date:datetime=None, filter_type:str='iir', gap:int=60) -> pd.DataFrame:
         """
         필터의 입력 날짜 안정화 기간 데이터프레임 :: IIR 필터 전용
+        :param price: 필터 대상 가격
         :param date: 입력 날짜
         :param filter_type: 필터 종류
         :param gap: 필터 안정화 추정 기간(일수)
@@ -555,7 +556,7 @@ class filters(asset):
         59  35476.114012  35505.357966  ...  35910.011256          59
         """
         app = {'sma':self.__sma__, 'ema':self.__ema__, 'iir': self.__iir__, 'fir':self.__fir__}[filter_type.lower()]
-        base = self.price[self.filterby].copy()
+        base = price.copy()
 
         time_span = base.index.tolist()
         date = date if date else random.sample(time_span, 1)[0]
@@ -581,7 +582,7 @@ class filters(asset):
         samples = time_span[121:-120] if count == -1 else random.sample(time_span[121:-120], count)
         objs = []
         for sample in samples:
-            raw = self.oscillation(date=sample, filter_type='iir', gap=60)
+            raw = self.response(date=sample, filter_type='iir', gap=60)
             raw.drop(columns=[sample.strftime("%Y-%m-%d")], inplace=True)
             err = (100 * (raw.iloc[-1] / raw.iloc[0] - 1)).to_dict()
             objs.append(err)
