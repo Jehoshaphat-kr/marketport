@@ -150,7 +150,7 @@ class toolkit:
             calc[f'COLOR-{td}TD'].fillna('#F63538')
         return calc.drop(columns=['시가', '저가', '고가', '종가'])
 
-    def __gid__(self, base:pd.Series, windows:list):
+    def guides(self, base:pd.Series, windows:list):
         """
         일반 주가 가이던스 분석
         :param base: 필터 대상 시계열 데이터(주가)
@@ -164,14 +164,15 @@ class toolkit:
             self.__fir__(base=base, windows=windows)
         ], axis=1)
 
-    def __trd__(self, base:pd.Series, windows:list):
+    def trends(self, base:pd.Series, windows:list):
         """
         일반 주가 추세 분석
-        :param base:
+        :param base: 필터 대상 시계열 데이터(주가)
+        :param windows: 필터 대상 데이터 개수 모음
         :return:
         """
         cumulate = 100 * ((base.pct_change().fillna(0) + 1).cumprod() - 1)
-        rebase = self.__gid__(base=cumulate, windows=windows)
+        rebase = self.guides(base=cumulate, windows=windows)
         frame = pd.concat(objs={
             '중장기IIR': rebase['IIR60D'] - rebase['EMA120D'],
             '중기IIR': rebase['IIR60D'] - rebase['EMA60D'],
@@ -510,7 +511,7 @@ class asset(toolkit):
         """
         if not self._guide_.empty:
             return self._guide_
-        self._guide_ = self.__gid__(base=self.price[self.filterby], windows=self.windows)
+        self._guide_ = self.guides(base=self.price[self.filterby], windows=self.windows)
         return self._guide_
 
     @property
@@ -521,7 +522,7 @@ class asset(toolkit):
         """
         if not self._trend_.empty:
             return self._trend_
-        self._trend_ = self.__trd__(base=self.price[self.filterby], windows=self.windows)
+        self._trend_ = self.trends(base=self.price[self.filterby], windows=self.windows)
         return self._trend_
 
     @property
@@ -535,32 +536,9 @@ class asset(toolkit):
         self._refer_ = self.__ans__(data=self.price, by='종가')
         return self._refer_
 
-    def rebase(self):
-        """
-        (백테스트) 과거 시점 필터 데이터 재구성
-        :return:
-        """
-        val = []
-        for date in self.price.index:
-            base = self.price[self.price.index <= date].copy()
-            trend = self.__trd__(base=base[self.filterby], windows=self.windows)
-            if len(base) < 10:
-                val.append(0)
-                continue
 
-            calc = trend[-10:]
-            sharpe = ((calc[-1]/calc[0])-1)/(np.log(calc.pct_change()).std() * 252 ** 0.5)
-            val.append(sharpe)
-
-    def adequacy(self):
-        """
-        투자 적합성 판정
-        :return:
-        """
-        return
-
-class datum(asset):
-    def oscillation(self, date:datetime=None, filter_type:str='iir', gap:int=60) -> pd.DataFrame:
+class filters(asset):
+    def response(self, date:datetime=None, filter_type:str='iir', gap:int=60) -> pd.DataFrame:
         """
         필터의 입력 날짜 안정화 기간 데이터프레임 :: IIR 필터 전용
         :param date: 입력 날짜
