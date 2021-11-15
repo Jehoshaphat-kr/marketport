@@ -271,7 +271,7 @@ class chart:
         guide = frame.drop(columns=price.columns).copy().join(price[by], how='left')
 
         for col in guide.columns:
-            cond = col[-3:] == '60D' or col == by
+            cond = col[-3:] == '60D' or col == by and not col.startswith('FIR')
             hover = col + ': %{y:,}원' if col == by else col + ': %{y:,.2f}'
             fig.add_trace(go.Scatter(
                 x=guide.index,
