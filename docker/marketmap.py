@@ -343,15 +343,15 @@ class map2js(frame):
         print("Proc... JavaScript 변환 중...")
         syntax = f'document.getElementsByClassName("date")[0].innerHTML="{self.date.year}년 {self.date.month}월 {self.date.day}일 종가 기준";'
 
-        dir_file = os.path.join(__root__, f'warehouse/deploy/marketmap/{self.date}')
+        dir_file = os.path.join(__root__, 'warehouse/deploy/marketmap/js')
         if not os.path.isdir(dir_file):
             os.makedirs(dir_file)
 
         cnt = 1
-        __js__ = os.path.join(dir_file, "marketmap-r{}.js".format(cnt))
+        __js__ = os.path.join(dir_file, f"marketmap-{self.date.strftime('%Y%m%d')[2:]}-r{cnt}.js")
         while os.path.isfile(__js__):
             cnt += 1
-            __js__ = os.path.join(dir_file, "marketmap-r{}.js".format(cnt))
+            __js__ = os.path.join(dir_file, f"marketmap-{self.date.strftime('%Y%m%d')[2:]}-r{cnt}.js")
 
         for name, data in [
             ('labels', self.labels),
@@ -387,7 +387,8 @@ if __name__ == "__main__":
     # print(frm.mapframe)
 
     marketmap = map2js(
-        date=datetime.today()
+        # date=datetime.today()
+        date=datetime(2021, 11, 12)
     )
     marketmap.collect()
     marketmap.convert()
