@@ -271,7 +271,7 @@ class chart:
         guide = frame.drop(columns=price.columns).copy().join(price[by], how='left')
 
         for col in guide.columns:
-            cond = col[-3:] == '60D' or col == by and not col.startswith('FIR')
+            cond = (col[-3:] == '60D' or col == by) and (not col.startswith('FIR'))
             hover = col + ': %{y:,}원' if col == by else col + ': %{y:,.2f}'
             fig.add_trace(go.Scatter(
                 x=guide.index,
@@ -501,6 +501,8 @@ class asset(toolkit):
         self._guide_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         self._refer_ = pd.DataFrame()
+        self._range_ = pd.DataFrame()
+        self._limit_ = pd.DataFrame()
         return
 
     @property
@@ -536,6 +538,96 @@ class asset(toolkit):
         self._refer_ = self.__ans__(data=self.price, by='종가')
         return self._refer_
 
+    @property
+    def range(self):
+        """
+        기간별 주가 진동 범위
+        :return:
+        """
+        if not self._range_.empty:
+            return self._range_
+        objs = {}
+        for dt, label in [(365, '1Y'), (0, 'YTD'), (182, '6M'), (91, '3M')]:
+            print(label)
+            df = self.price[
+                self.price.index >= datetime(datetime.today().year, 1, 1)
+            ].copy() if label == 'YTD' else self.price[
+                self.price.index >= (datetime.today() - timedelta(dt))
+            ].copy()
+
+            df['X'] = np.arange(len(df)) + 1
+
+            df_up = df.copy()
+            df_dn = df.copy()
+            # while len(df_up) > 2:
+            #     slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
+            #     df_up = df_up[df_up['고가'] >= (slope * df_up['X'] + intercept)]
+            # if len(df_up) == 1:
+            #     df_up = df_up.append(df.iloc[-1])
+
+            while True:
+                slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
+                df_up = df_up[df_up['고가'] > (slope * df_up['X'] + intercept)]
+                if len(df_up) <= 3:
+                    break
+
+            # while len(df_dn) > 2:
+            #     slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
+            #     df_dn = df_dn[df_dn['저가'] <= (slope * df_dn['X'] + intercept)]
+            # if len(df_dn) == 1:
+            #     df_dn = df_dn.append(df.iloc[-1])
+            while True:
+                slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
+                df_dn = df_dn[df_dn['저가'] < (slope * df_dn['X'] + intercept)]
+                if len(df_dn) <= 5:
+                    break
+            slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
+            objs[f'{label}Up'] = slope * df['X'] + intercept
+
+            slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
+            objs[f'{label}Dn'] = slope * df['X'] + intercept
+        self._range_ = pd.concat(objs=objs, axis=1)
+        return self._range_
+
+    @property
+    def limit(self) -> pd.DataFrame:
+        """
+        지지선/저항선 표기
+        :return:
+        """
+        if not self._limit_.empty:
+            return self._limit_
+
+        def is_support(df, i):
+            _ = df['저가']
+            support = _[i] < _[i - 1] < _[i - 2] and _[i] < _[i + 1]  < _[i + 2]
+            return support
+
+        def is_resistance(df, i):
+            _ = df['고가']
+            resistance = _[i] > _[i - 1] > _[i - 2] and _[i] > _[i + 1]  > _[i + 2]
+            return resistance
+
+        def is_far_from_level(l, s, lines):
+            return np.sum([abs(l - x) < s for x in lines]) == 0
+
+        frm = self.price[self.price.index >= datetime(2021, 1, 1)].copy()
+        s_hat = np.mean(frm['고가'] - frm['저가'])
+
+        levels = []
+        index = []
+        for n, date in enumerate(frm.index[2: len(frm) - 2]):
+            if is_support(frm, n):
+                if is_far_from_level(l = frm['저가'][n], s=s_hat, lines=levels):
+                    levels.append((n, frm['저가'][n]))
+                    index.append(date)
+            elif is_resistance(frm, n):
+                if is_far_from_level(l=frm['고가'][n], s=s_hat, lines=levels):
+                    levels.append((n, frm['고가'][n]))
+                    index.append(date)
+        self._limit_ = pd.DataFrame(levels, columns=['N', '레벨'], index=index)
+        return self._limit_
+
 
 class filters(toolkit):
     def response(self, price:pd.Series, date:datetime=None, filter_type:str='iir', gap:int=60) -> pd.DataFrame:
@@ -570,14 +662,13 @@ class filters(toolkit):
             objs.append(data)
         return pd.DataFrame(data=objs)
 
-    def answers(self, count:int=-1):
+    def answers(self, base:pd.Series, count:int=-1):
         """
         필터 안정화 추정 학습용 데이터 샘플 (정답지)
+        :param base: 가격 정보
         :param count:
         :return:
         """
-        base = self.price[self.filterby].copy()
-
         time_span = base.index.tolist()
         samples = time_span[121:-120] if count == -1 else random.sample(time_span[121:-120], count)
         objs = []
@@ -591,26 +682,42 @@ class filters(toolkit):
 
 if __name__ == "__main__":
 
-    stock = asset(ticker='000660', src='offline')
+    stock = asset(ticker='060150', src='offline')
     print(f"{stock.name}({stock.ticker})")
 
-    display = chart(name=stock.name, ticker=stock.ticker)
-    display.guidance(
-        frame=pd.concat([stock.price, stock.guide], axis=1), by=stock.filterby,
-        show=False, save=True
-    )
-    display.tendency(
-        frame=pd.concat([stock.price, stock.trend], axis=1), by=stock.filterby,
-        show=False, save=True
-    )
-    display.momentum(
-        frame=pd.concat([stock.price, stock.trend], axis=1),
-        show=False, save=True
-    )
-    display.scatter(
-        frame=pd.concat([stock.reference, stock.trend], axis=1), label='d중기IIR',
-        threshold=0, td=20, show=False, save=True
-    )
+    # display = chart(name=stock.name, ticker=stock.ticker)
+    # fig = display.guidance(
+    #     frame=stock.price, by='종가',
+    #     show=False, save=False
+    # )
+    # for col in stock.range.columns:
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=stock.range.index,
+    #             y=stock.range[col],
+    #             name=col,
+    #             visible='legendonly'
+    #         )
+    #     )
+    # fig.show()
+
+
+    # fig = display.guidance(
+    #     frame=pd.concat([stock.price, stock.guide], axis=1), by=stock.filterby,
+    #     show=False, save=True
+    # )
+    # display.tendency(
+    #     frame=pd.concat([stock.price, stock.trend], axis=1), by=stock.filterby,
+    #     show=False, save=True
+    # )
+    # display.momentum(
+    #     frame=pd.concat([stock.price, stock.trend], axis=1),
+    #     show=False, save=True
+    # )
+    # display.scatter(
+    #     frame=pd.concat([stock.reference, stock.trend], axis=1), label='d중기IIR',
+    #     threshold=0, td=20, show=False, save=True
+    # )
 
     # dater = datum(ticker='000660')
     # print(f"{dater.name}({dater.ticker})")
