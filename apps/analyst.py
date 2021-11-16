@@ -16,12 +16,12 @@ class toolkit:
     def __mta__() -> None:
         global __meta__
         __meta__ = pd.read_csv(
-            'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/group/WI26.csv',
+            'http://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/market/market.csv',
             encoding='utf-8',
             index_col='종목코드'
         ).join(
             other=pd.read_csv(
-                'http://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/market/market.csv',
+                'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/group/WI26.csv',
                 encoding='utf-8',
                 index_col='종목코드'
             ).drop(columns=['종목명']),
@@ -682,7 +682,7 @@ class filters(toolkit):
 
 if __name__ == "__main__":
 
-    stock = asset(ticker='060150', src='offline')
+    stock = asset(ticker='088980', src='offline')
     print(f"{stock.name}({stock.ticker})")
 
     # display = chart(name=stock.name, ticker=stock.ticker)
