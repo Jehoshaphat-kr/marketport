@@ -320,7 +320,8 @@ class chart:
                 mode='lines',
                 line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=1),
                 name=name,
-                hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y}<extra></extra>'
+                visible='legendonly',
+                hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y:,}원<extra></extra>'
             ))
 
         for col in data.columns:
