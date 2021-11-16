@@ -255,6 +255,98 @@ class chart:
             xaxis_rangeslider=dict(visible=False)
         )
 
+    def default(self, base:pd.DataFrame, support_resist:pd.DataFrame, show:bool=False, save:bool=False) -> go.Figure:
+        """
+        기본 주가 분석
+        :param base:
+        :param support_resist:
+        :param show:
+        :param save:
+        :return:
+        """
+        data = base[base.index >= base.index[-1] - timedelta(5*365)].copy()
+        fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05)
+        fig.add_trace(go.Bar(
+            x=data.index,
+            y=data['거래량'],
+            customdata=self.format(date_list=data.index),
+            name='거래량',
+            marker=dict(
+                color=['blue' if data.loc[d, '시가'] > data.loc[d, '종가'] else 'red' for d in data.index]
+            ),
+            showlegend=False,
+            hovertemplate='날짜:%{customdata}<br>거래량:%{y:,}<extra></extra>'
+        ), row=2, col=1)
+
+        fig.add_trace(go.Candlestick(
+            x=data.index,
+            customdata=self.format(date_list=data.index),
+            open=data['시가'],
+            high=data['고가'],
+            low=data['저가'],
+            close=data['종가'],
+            increasing_line=dict(color='red'),
+            decreasing_line=dict(color='blue'),
+            name='일봉',
+            visible='legendonly',
+            showlegend=True,
+        ), row=1, col=1)
+
+        for col in ['시가', '고가', '저가', '종가']:
+            fig.add_trace(go.Scatter(
+                x=data.index,
+                y=data[col],
+                name=col,
+                customdata=self.format(date_list=data.index),
+                visible=True if col == '종가' else 'legendonly',
+                hovertemplate=col + '<br>날짜:%{customdata}<br>가격:%{y:,}원<extra></extra>'
+            ), row=1, col=1)
+
+        for col in data.columns:
+            if not col.startswith('B-'):
+                continue
+            fig.add_trace(go.Scatter(
+                x=data.index,
+                y=data[col],
+                name=col,
+                visible='legendonly',
+                hovertemplate=col + '<extra></extra>'
+            ))
+
+        for date, level, name in zip(support_resist.index, support_resist['레벨'], support_resist['종류']):
+            fig.add_trace(go.Scatter(
+                x=[date + timedelta(dt) for dt in range(-20, 21)],
+                y=[level] * 40,
+                mode='lines',
+                line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=1),
+                name=name,
+                hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y}<extra></extra>'
+            ))
+
+        for col in data.columns:
+            if not (col.startswith('SMA') or col.startswith('IIR')):
+                continue
+            fig.add_trace(go.Scatter(
+                x=data.index,
+                y=data[col],
+                name=col,
+                customdata=self.format(date_list=data.index),
+                visible='legendonly',
+                hovertemplate=col + '<br>날짜:%{customdata}<br><extra></extra>'
+            ))
+        fig.update_layout(self.layout(title='주가 기본 분석',ytitle='가격[KRW]'))
+        fig.update_layout(dict(
+            legend=dict(traceorder='normal'),
+            xaxis=dict(title='', showticklabels=True),
+            xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
+            yaxis2=dict(title='거래량', showgrid=True, gridcolor='lightgrey')
+        ))
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-default.html", auto_open=False)
+        return fig
+
     def guidance(self, frame:pd.DataFrame, by:str, show:bool=False, save:bool=False) -> go.Figure:
         """
         주가 가이던스(필터 선) 차트
@@ -501,7 +593,7 @@ class asset(toolkit):
         self._guide_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         self._refer_ = pd.DataFrame()
-        self._range_ = pd.DataFrame()
+        self._bound_ = pd.DataFrame()
         self._limit_ = pd.DataFrame()
         return
 
@@ -539,16 +631,15 @@ class asset(toolkit):
         return self._refer_
 
     @property
-    def range(self):
+    def bound(self):
         """
         기간별 주가 진동 범위
         :return:
         """
-        if not self._range_.empty:
-            return self._range_
+        if not self._bound_.empty:
+            return self._bound_
         objs = {}
         for dt, label in [(365, '1Y'), (0, 'YTD'), (182, '6M'), (91, '3M')]:
-            print(label)
             df = self.price[
                 self.price.index >= datetime(datetime.today().year, 1, 1)
             ].copy() if label == 'YTD' else self.price[
@@ -559,35 +650,19 @@ class asset(toolkit):
 
             df_up = df.copy()
             df_dn = df.copy()
-            # while len(df_up) > 2:
-            #     slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
-            #     df_up = df_up[df_up['고가'] >= (slope * df_up['X'] + intercept)]
-            # if len(df_up) == 1:
-            #     df_up = df_up.append(df.iloc[-1])
-
-            while True:
+            while len(df_up) > 3:
                 slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
                 df_up = df_up[df_up['고가'] > (slope * df_up['X'] + intercept)]
-                if len(df_up) <= 3:
-                    break
-
-            # while len(df_dn) > 2:
-            #     slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
-            #     df_dn = df_dn[df_dn['저가'] <= (slope * df_dn['X'] + intercept)]
-            # if len(df_dn) == 1:
-            #     df_dn = df_dn.append(df.iloc[-1])
-            while True:
-                slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
-                df_dn = df_dn[df_dn['저가'] < (slope * df_dn['X'] + intercept)]
-                if len(df_dn) <= 5:
-                    break
             slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
-            objs[f'{label}Up'] = slope * df['X'] + intercept
+            objs[f'B-U{label}'] = slope * df['X'] + intercept
 
+            while len(df_dn) > 3:
+                slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
+                df_dn = df_dn[df_dn['저가'] <= (slope * df_dn['X'] + intercept)]
             slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
-            objs[f'{label}Dn'] = slope * df['X'] + intercept
-        self._range_ = pd.concat(objs=objs, axis=1)
-        return self._range_
+            objs[f'B-D{label}'] = slope * df['X'] + intercept
+        self._bound_ = pd.concat(objs=objs, axis=1)
+        return self._bound_
 
     @property
     def limit(self) -> pd.DataFrame:
@@ -611,21 +686,25 @@ class asset(toolkit):
         def is_far_from_level(l, s, lines):
             return np.sum([abs(l - x) < s for x in lines]) == 0
 
-        frm = self.price[self.price.index >= datetime(2021, 1, 1)].copy()
+        frm = self.price[self.price.index >= (self.price.index[-1] - timedelta(180))].copy()
         s_hat = np.mean(frm['고가'] - frm['저가'])
 
-        levels = []
-        index = []
+        levels = []; index = []; types = []; s_cnt = 1; r_cnt = 1
         for n, date in enumerate(frm.index[2: len(frm) - 2]):
             if is_support(frm, n):
                 if is_far_from_level(l = frm['저가'][n], s=s_hat, lines=levels):
                     levels.append((n, frm['저가'][n]))
                     index.append(date)
+                    types.append(f'지지선{s_cnt}')
+                    s_cnt += 1
             elif is_resistance(frm, n):
                 if is_far_from_level(l=frm['고가'][n], s=s_hat, lines=levels):
                     levels.append((n, frm['고가'][n]))
                     index.append(date)
+                    types.append(f'저항선{r_cnt}')
+                    r_cnt += 1
         self._limit_ = pd.DataFrame(levels, columns=['N', '레벨'], index=index)
+        self._limit_['종류'] = types
         return self._limit_
 
 
@@ -685,23 +764,12 @@ if __name__ == "__main__":
     stock = asset(ticker='088980', src='offline')
     print(f"{stock.name}({stock.ticker})")
 
-    # display = chart(name=stock.name, ticker=stock.ticker)
-    # fig = display.guidance(
-    #     frame=stock.price, by='종가',
-    #     show=False, save=False
-    # )
-    # for col in stock.range.columns:
-    #     fig.add_trace(
-    #         go.Scatter(
-    #             x=stock.range.index,
-    #             y=stock.range[col],
-    #             name=col,
-    #             visible='legendonly'
-    #         )
-    #     )
-    # fig.show()
-
-
+    display = chart(name=stock.name, ticker=stock.ticker)
+    fig = display.default(
+        base=pd.concat([stock.price, stock.guide, stock.bound], axis=1),
+        support_resist=stock.limit,
+        show=True, save=False
+    )
     # fig = display.guidance(
     #     frame=pd.concat([stock.price, stock.guide], axis=1), by=stock.filterby,
     #     show=False, save=True
