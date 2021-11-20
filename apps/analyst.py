@@ -266,6 +266,8 @@ class chart:
         """
         data = base[base.index >= base.index[-1] - timedelta(5*365)].copy()
         fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05)
+        
+        # 거래량
         fig.add_trace(go.Bar(
             x=data.index,
             y=data['거래량'],
@@ -277,7 +279,8 @@ class chart:
             showlegend=False,
             hovertemplate='날짜:%{customdata}<br>거래량:%{y:,}<extra></extra>'
         ), row=2, col=1)
-
+        
+        # 일봉
         fig.add_trace(go.Candlestick(
             x=data.index,
             customdata=self.format(date_list=data.index),
@@ -291,7 +294,8 @@ class chart:
             visible='legendonly',
             showlegend=True,
         ), row=1, col=1)
-
+        
+        # 개별 가격
         for col in ['시가', '고가', '저가', '종가']:
             fig.add_trace(go.Scatter(
                 x=data.index,
@@ -302,28 +306,37 @@ class chart:
                 hovertemplate=col + '<br>날짜:%{customdata}<br>가격:%{y:,}원<extra></extra>'
             ), row=1, col=1)
 
+        # 추세선
         for col in data.columns:
-            if not col.startswith('B-'):
+            if not '추세' in col:
                 continue
+            gap = [l for l in ['1Y', 'YTD', '6M', '3M'] if col.startswith(l)][0]
             fig.add_trace(go.Scatter(
                 x=data.index,
                 y=data[col],
-                name=col,
+                legendgroup=f'{gap}추세선',
+                name=f'{gap}추세선',
                 visible='legendonly',
+                showlegend=True if col.endswith('(상)') else False,
                 hovertemplate=col + '<extra></extra>'
             ))
 
-        for date, level, name in zip(support_resist.index, support_resist['레벨'], support_resist['종류']):
+        # 지지/저항선
+        for n, date in enumerate(support_resist.index):
+            name = support_resist.loc[date, '종류']
             fig.add_trace(go.Scatter(
                 x=[date + timedelta(dt) for dt in range(-20, 21)],
-                y=[level] * 40,
+                y=[support_resist.loc[date, '레벨']] * 40,
                 mode='lines',
-                line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=1),
-                name=name,
+                line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=2),
+                name='지지/저항선',
+                legendgroup='지지/저항선',
+                showlegend=False if n else True,
                 visible='legendonly',
                 hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y:,}원<extra></extra>'
             ))
-
+        
+        # 필터
         for col in data.columns:
             if not (col.startswith('SMA') or col.startswith('IIR')):
                 continue
@@ -655,13 +668,13 @@ class asset(toolkit):
                 slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
                 df_up = df_up[df_up['고가'] > (slope * df_up['X'] + intercept)]
             slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
-            objs[f'B-U{label}'] = slope * df['X'] + intercept
+            objs[f'{label}추세(상)'] = slope * df['X'] + intercept
 
             while len(df_dn) > 3:
                 slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
                 df_dn = df_dn[df_dn['저가'] <= (slope * df_dn['X'] + intercept)]
             slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
-            objs[f'B-D{label}'] = slope * df['X'] + intercept
+            objs[f'{label}추세(하)'] = slope * df['X'] + intercept
         self._bound_ = pd.concat(objs=objs, axis=1)
         return self._bound_
 
@@ -762,14 +775,14 @@ class filters(toolkit):
 
 if __name__ == "__main__":
 
-    stock = asset(ticker='088980', src='offline')
+    stock = asset(ticker='253450', src='offline')
     print(f"{stock.name}({stock.ticker})")
 
     display = chart(name=stock.name, ticker=stock.ticker)
     fig = display.default(
         base=pd.concat([stock.price, stock.guide, stock.bound], axis=1),
         support_resist=stock.limit,
-        show=True, save=False
+        show=False, save=True
     )
     # fig = display.guidance(
     #     frame=pd.concat([stock.price, stock.guide], axis=1), by=stock.filterby,

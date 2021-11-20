@@ -388,7 +388,7 @@ if __name__ == "__main__":
 
     marketmap = map2js(
         # date=datetime.today()
-        date=datetime(2021, 11, 12)
+        date=datetime(2021, 11, 19)
     )
     marketmap.collect()
     marketmap.convert()
