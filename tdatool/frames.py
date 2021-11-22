@@ -26,6 +26,8 @@ class TimeSeries(chart):
 
         self.__price__ = pd.DataFrame()
         self.__guide__ = pd.DataFrame()
+        self.__trend__ = pd.DataFrame()
+        self.__macd__ = pd.DataFrame()
         return
 
     @property
@@ -59,6 +61,32 @@ class TimeSeries(chart):
             return self.__guide__
         self.__guide__ = pd.concat(objs=[self.sma, self.ema, self.fir, self.iir], axis=1)
         return self.__guide__
+
+    @property
+    def trend(self):
+        """
+        일반 주가 추세 분석
+        :return:
+        """
+        if not self.__trend__.empty:
+            return self.__trend__
+        rebase = self.guide.copy()
+        frame = pd.concat(objs={
+            '중장기IIR': rebase['IIR60D'] - rebase['EMA120D'],
+            '중기IIR': rebase['IIR60D'] - rebase['EMA60D'],
+            '중단기IIR': rebase['IIR20D'] - rebase['EMA60D'],
+            '중장기FIR': rebase['FIR60D'] - rebase['EMA120D'],
+            '중기FIR': rebase['FIR60D'] - rebase['EMA60D'],
+            '중단기FIR': rebase['FIR20D'] - rebase['EMA60D'],
+            '중장기SMA': rebase['SMA60D'] - rebase['SMA120D'],
+            '중단기SMA': rebase['SMA20D'] - rebase['SMA60D'],
+            '중장기EMA': rebase['EMA60D'] - rebase['EMA120D'],
+            '중단기EMA': rebase['EMA20D'] - rebase['EMA60D'],
+        }, axis=1)
+        for col in frame.columns:
+            frame[f'd{col}'] = frame[col].diff()
+            frame[f'd2{col}'] = frame[col].diff().diff()
+        return frame
 
     @property
     def sma(self) -> pd.DataFrame:
@@ -127,6 +155,39 @@ class TimeSeries(chart):
         return pd.concat(objs=objs, axis=1)
 
     @property
+    def macd(self) -> pd.DataFrame:
+        """
+        Moving Average Convergence and Divergence
+        :return:
+        """
+        if not self.__macd__.empty:
+            return self.__macd__
+        exp1 = self.price[self.filter_key].ewm(span=12, adjust=False).mean()
+        exp2 = self.price[self.filter_key].ewm(span=26, adjust=False).mean()
+        line = pd.DataFrame(exp1 - exp2).rename(columns={self.filter_key: 'MACD'})
+        signal = pd.DataFrame(line.ewm(span=9, adjust=False).mean()).rename(columns={'MACD': 'signal'})
+        hist = pd.DataFrame(line['MACD'] - signal['signal']).rename(columns={0: 'hist'})
+        self.__macd__ = pd.concat(objs=[line, signal, hist], axis=1)
+        return self.__macd__
+
+    @property
+    def macd_pick(self) -> pd.DataFrame:
+        """
+        MACD Buy/Sell
+        :return:
+        """
+        macd = self.macd['MACD'].values
+        signal = self.macd['signal'].values
+
+        objs = []
+        for n, date in enumerate(self.macd.index[:-1]):
+            if macd[n] < signal[n] and macd[n+1] > signal[n+1]:
+                objs.append([date, macd[n], 'Buy', 'triangle-up', 'red'])
+            elif macd[n] > signal[n] and macd[n+1] < signal[n+1]:
+                objs.append([date, macd[n], 'Sell', 'triangle-down', 'blue'])
+        return pd.DataFrame(data=objs, columns=['날짜', 'value', 'B/S', 'symbol', 'color']).set_index(keys='날짜')
+
+    @property
     def bound(self):
         """
         기간별 주가 진동 범위
@@ -147,13 +208,13 @@ class TimeSeries(chart):
                 slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
                 df_up = df_up[df_up['고가'] > (slope * df_up['X'] + intercept)]
             slope, intercept, r_value, p_value, std_err = linregress(x=df_up['X'], y=df_up['고가'])
-            objs[f'{label}추세(상)'] = slope * df['X'] + intercept
+            objs[f'{label}추세UP'] = slope * df['X'] + intercept
 
             while len(df_dn) > 3:
                 slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
                 df_dn = df_dn[df_dn['저가'] <= (slope * df_dn['X'] + intercept)]
             slope, intercept, r_value, p_value, std_err = linregress(x=df_dn['X'], y=df_dn['저가'])
-            objs[f'{label}추세(하)'] = slope * df['X'] + intercept
+            objs[f'{label}추세DN'] = slope * df['X'] + intercept
         return pd.concat(objs=objs, axis=1)
 
     @property
@@ -178,10 +239,10 @@ class TimeSeries(chart):
         frm = self.price[self.price.index >= (self.price.index[-1] - timedelta(180))].copy()
         s_hat = np.mean(frm['고가'] - frm['저가'])
 
-        levels = [];
-        index = [];
-        types = [];
-        s_cnt = 1;
+        levels = []
+        index = []
+        types = []
+        s_cnt = 1
         r_cnt = 1
         for n, date in enumerate(frm.index[2: len(frm) - 2]):
             if is_support(frm, n):
@@ -196,6 +257,6 @@ class TimeSeries(chart):
                     index.append(date)
                     types.append(f'저항선{r_cnt}')
                     r_cnt += 1
-        self._limit_ = pd.DataFrame(levels, columns=['N', '레벨'], index=index)
-        self._limit_['종류'] = types
-        return self._limit_
+        _limit_ = pd.DataFrame(levels, columns=['N', '레벨'], index=index)
+        _limit_['종류'] = types
+        return _limit_

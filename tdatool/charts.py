@@ -2,6 +2,7 @@ import plotly.graph_objects as go
 import plotly.offline as of
 import pandas as pd
 from plotly.subplots import make_subplots
+from datetime import datetime, timedelta
 
 
 class chart:
@@ -10,7 +11,11 @@ class chart:
     name = ''
     price = pd.DataFrame()
     guide = pd.DataFrame()
+    trend = pd.DataFrame()
     bound = pd.DataFrame()
+    limit = pd.DataFrame()
+    macd = pd.DataFrame()
+    macd_pick=pd.DataFrame()
 
     @staticmethod
     def format(span):
@@ -68,7 +73,7 @@ class chart:
 
     def s_price(self, show:bool=False, save:bool=False) -> go.Figure:
         """
-
+        주가 기본 분석 차트
         :param show:
         :param save:
         :return:
@@ -100,19 +105,35 @@ class chart:
             hovertemplate='종가: %{y}원<br>날짜: %{meta}<extra></extra>'
         ))
 
-        # 거래량
-        volume = self.price['거래량']
-        fig.add_trace(go.Bar(
-            x=volume.index,
-            y=volume.values,
-            customdata=self.format(span=self.price.index),
-            name='거래량',
-            marker=dict(
-                color=['blue' if self.price.loc[d, '시가'] > self.price.loc[d, '종가'] else 'red' for d in volume.index]
-            ),
-            showlegend=False,
-            hovertemplate='날짜:%{customdata}<br>거래량:%{y:,}<extra></extra>'
-        ), row=2, col=1)
+        # 추세선
+        data = self.bound.copy()
+        for col in data.columns:
+            gap = [l for l in ['1Y', 'YTD', '6M', '3M'] if col.startswith(l)][0]
+            fig.add_trace(go.Scatter(
+                x=data.index,
+                y=data[col],
+                legendgroup=f'{gap}추세선',
+                name=f'{gap}추세선',
+                visible='legendonly',
+                showlegend=True if col.endswith('UP') else False,
+                hovertemplate=col + '<extra></extra>'
+            ))
+
+        # 지지/저항선
+        support_resist = self.limit.copy()
+        for n, date in enumerate(support_resist.index):
+            name = support_resist.loc[date, '종류']
+            fig.add_trace(go.Scatter(
+                x=[date + timedelta(dt) for dt in range(-20, 21)],
+                y=[support_resist.loc[date, '레벨']] * 40,
+                mode='lines',
+                line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=2),
+                name='지지/저항선',
+                legendgroup='지지/저항선',
+                showlegend=False if n else True,
+                visible='legendonly',
+                hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y:,}원<extra></extra>'
+            ))
 
         # 필터선
         guide = self.guide.copy()
@@ -127,10 +148,22 @@ class chart:
                 hovertemplate=col + ': %{y:,.2f}<br>날짜: %{meta}<extra></extra>'
             ))
 
+        # 거래량
+        volume = self.price['거래량']
+        fig.add_trace(go.Bar(
+            x=volume.index,
+            y=volume.values,
+            customdata=self.format(span=self.price.index),
+            name='거래량',
+            marker=dict(
+                color=['blue' if self.price.loc[d, '시가'] > self.price.loc[d, '종가'] else 'red' for d in volume.index]
+            ),
+            showlegend=False,
+            hovertemplate='날짜:%{customdata}<br>거래량:%{y:,}<extra></extra>'
+        ), row=2, col=1)
+
         layout = self.layout_basic(title='기본 분석 차트', x_title='', y_title='가격(KRW)')
         layout.update(dict(
-            # legend=dict(traceorder='normal'),
-            # xaxis=dict(title='', showticklabels=True),
             xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
             yaxis2=dict(title='거래량', showgrid=True, gridcolor='lightgrey')
         ))
@@ -140,4 +173,94 @@ class chart:
             fig.show()
         if save:
             of.plot(fig, filename="chart-basic.html", auto_open=False)
+        return fig
+
+    def s_trend(self, show:bool=False, save:bool=False):
+        """
+        추세선 및 MACD
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05,
+                            specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
+
+        # 종가 정보
+        price = self.price['종가']
+        fig.add_trace(go.Scatter(
+            x=price.index,
+            y=price,
+            meta=self.format(span=price.index),
+            name='종가',
+            hovertemplate='날짜: %{meta}<br>종가: %{y:,}원<extra></extra>'
+        ), row=1, col=1, secondary_y=False)
+
+        # 추세선
+        trend = self.trend.copy()
+        for col in trend.columns:
+            if col.startswith('d'):
+                continue
+            fig.add_trace(go.Scatter(
+                x=trend.index,
+                y=trend[col],
+                customdata=self.format(span=trend.index),
+                name=col,
+                mode='lines',
+                showlegend=True,
+                visible=True if col.endswith('IIR') else 'legendonly',
+                hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
+            ), row=1, col=1, secondary_y=True)
+
+        # MACD
+        form = self.format(span=self.macd.index)
+        for col in ['MACD', 'signal']:
+            fig.add_trace(go.Scatter(
+                x=self.macd.index,
+                y=self.macd[col],
+                name='MACD-Sig' if col == 'signal' else col,
+                meta=form,
+                showlegend=True,
+                hovertemplate=col+'<br>날짜: %{meta}<extra></extra>'
+            ), row=2, col=1)
+        fig.add_trace(go.Bar(
+            x=self.macd.index,
+            y=self.macd['hist'],
+            meta=form,
+            name='MACD-Hist',
+            marker=dict(
+                color=['blue' if v < 0 else 'red' for v in self.macd['hist'].values]
+            ),
+            showlegend=False,
+            hovertemplate='날짜:%{customdata}<br>히스토그램:%{y:.2f}<extra></extra>'
+        ), row=2, col=1)
+        fig.add_trace(go.Scatter(
+            x=self.macd_pick.index,
+            y=self.macd_pick['value'],
+            name='MACD B/S',
+            mode='markers',
+            marker=dict(
+                symbol=self.macd_pick['symbol'],
+                color=self.macd_pick['color'],
+                size=7
+            ),
+            text=self.macd_pick['B/S'],
+            meta=self.format(span=self.macd_pick.index),
+            opacity=0.7,
+            hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>',
+            visible='legendonly',
+            showlegend=True
+        ), row=2, col=1)
+
+        layout = self.layout_basic(title='추세 분석 차트', x_title='', y_title='종가[KRW]')
+        layout.update(dict(
+            xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
+            yaxis2=dict(title='추세', showgrid=False, zeroline=True, zerolinecolor='grey', zerolinewidth=2),
+            yaxis3=dict(title='MACD', showgrid=True, gridcolor='lightgrey')
+        ))
+        fig.update_layout(layout)
+
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-tendency.html", auto_open=False)
         return fig
