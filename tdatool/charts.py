@@ -14,8 +14,7 @@ class tchart:
     trend = pd.DataFrame()
     bound = pd.DataFrame()
     limit = pd.DataFrame()
-    macd = pd.DataFrame()
-    macd_pick=pd.DataFrame()
+    macd = (pd.DataFrame(), pd.DataFrame())
 
     @staticmethod
     def format(span):
@@ -212,39 +211,42 @@ class tchart:
             ), row=1, col=1, secondary_y=True)
 
         # MACD
-        form = self.format(span=self.macd.index)
+        data, pick = self.macd
+        form = self.format(span=data.index)
         for col in ['MACD', 'signal']:
             fig.add_trace(go.Scatter(
-                x=self.macd.index,
-                y=self.macd[col],
+                x=data.index,
+                y=data[col],
                 name='MACD-Sig' if col == 'signal' else col,
                 meta=form,
                 showlegend=True,
                 hovertemplate=col+'<br>날짜: %{meta}<extra></extra>'
             ), row=2, col=1)
+
         fig.add_trace(go.Bar(
-            x=self.macd.index,
-            y=self.macd['hist'],
+            x=data.index,
+            y=data['hist'],
             meta=form,
             name='MACD-Hist',
             marker=dict(
-                color=['blue' if v < 0 else 'red' for v in self.macd['hist'].values]
+                color=['blue' if v < 0 else 'red' for v in data['hist'].values]
             ),
             showlegend=False,
             hovertemplate='날짜:%{customdata}<br>히스토그램:%{y:.2f}<extra></extra>'
         ), row=2, col=1)
+
         fig.add_trace(go.Scatter(
-            x=self.macd_pick.index,
-            y=self.macd_pick['value'],
+            x=pick.index,
+            y=pick['value'],
             name='MACD B/S',
             mode='markers',
             marker=dict(
-                symbol=self.macd_pick['symbol'],
-                color=self.macd_pick['color'],
+                symbol=pick['symbol'],
+                color=pick['color'],
                 size=7
             ),
-            text=self.macd_pick['B/S'],
-            meta=self.format(span=self.macd_pick.index),
+            text=pick['B/S'],
+            meta=self.format(span=pick.index),
             opacity=0.7,
             hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>',
             visible='legendonly',

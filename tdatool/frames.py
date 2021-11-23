@@ -155,7 +155,7 @@ class TimeSeries(tchart):
         return pd.concat(objs=objs, axis=1)
 
     @property
-    def macd(self) -> pd.DataFrame:
+    def macd(self) -> (pd.DataFrame, pd.DataFrame):
         """
         Moving Average Convergence and Divergence
         :return:
@@ -168,24 +168,18 @@ class TimeSeries(tchart):
         signal = pd.DataFrame(line.ewm(span=9, adjust=False).mean()).rename(columns={'MACD': 'signal'})
         hist = pd.DataFrame(line['MACD'] - signal['signal']).rename(columns={0: 'hist'})
         self.__macd__ = pd.concat(objs=[line, signal, hist], axis=1)
-        return self.__macd__
 
-    @property
-    def macd_pick(self) -> pd.DataFrame:
-        """
-        MACD Buy/Sell
-        :return:
-        """
-        macd = self.macd['MACD'].values
-        signal = self.macd['signal'].values
-
+        # MACD 기반 BUY/SELL 지점 판단
+        m = line.values
+        s = signal.values
         objs = []
-        for n, date in enumerate(self.macd.index[:-1]):
-            if macd[n] < signal[n] and macd[n+1] > signal[n+1]:
-                objs.append([date, macd[n], 'Buy', 'triangle-up', 'red'])
-            elif macd[n] > signal[n] and macd[n+1] < signal[n+1]:
-                objs.append([date, macd[n], 'Sell', 'triangle-down', 'blue'])
-        return pd.DataFrame(data=objs, columns=['날짜', 'value', 'B/S', 'symbol', 'color']).set_index(keys='날짜')
+        for n, date in enumerate(self.__macd__.index[:-1]):
+            if m[n] < s[n] and m[n+1] > s[n+1]:
+                objs.append([date, m[n+1], 'Buy', 'triangle-up', 'red'])
+            elif m[n] > s[n] and m[n+1] < s[n+1]:
+                objs.append([date, m[n+1], 'Sell', 'triangle-down', 'blue'])
+        pick = pd.DataFrame(data=objs, columns=['날짜', 'value', 'B/S', 'symbol', 'color']).set_index(keys='날짜')
+        return self.__macd__, pick
 
     @property
     def bound(self):
