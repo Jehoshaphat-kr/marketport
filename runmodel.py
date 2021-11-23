@@ -1,11 +1,15 @@
 import tdatool as tt
 
 if __name__ == "__main__":
-    myEquity = tt.TimeSeries(
+    technical = tt.TimeSeries(
         ticker='011790',
         data_src='offline'
     )
-    print(f'{myEquity.name}({myEquity.ticker}) 기본 분석')
-    myEquity.s_price(show=False, save=True)
-    myEquity.s_trend(show=False, save=True)
-    # print(tb.meta)
+    print(f'{technical.name}({technical.ticker}) 기술 분석')
+    technical.s_price(show=False, save=True)
+    technical.s_trend(show=False, save=True)
+
+
+    fundamental = tt.Finances(
+        ticker='011790'
+    )

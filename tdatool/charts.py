@@ -5,7 +5,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
 
-class chart:
+class tchart:
 
     ticker = ''
     name = ''
@@ -264,3 +264,7 @@ class chart:
         if save:
             of.plot(fig, filename="chart-tendency.html", auto_open=False)
         return fig
+
+class fchart:
+    def layout_basic(self):
+        return

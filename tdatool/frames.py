@@ -2,13 +2,13 @@ import os
 import pandas as pd
 import numpy as np
 import tdatool as tt
-from tdatool.charts import chart
+from tdatool.charts import tchart, fchart
 from datetime import datetime, timedelta
 from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
 from scipy.stats import linregress
 
 
-class TimeSeries(chart):
+class TimeSeries(tchart):
     def __init__(
         self,
         ticker: str = '005930',
@@ -260,3 +260,33 @@ class TimeSeries(chart):
         _limit_ = pd.DataFrame(levels, columns=['N', '레벨'], index=index)
         _limit_['종류'] = types
         return _limit_
+
+
+class Finances(fchart):
+    def __init__(self, ticker:str):
+        self.ticker = ticker
+
+        self.__y_state__ = pd.DataFrame()
+        self.__q_state__ = pd.DataFrame()
+        return
+
+    @property
+    def y_state(self) -> pd.DataFrame:
+        """
+        연간 연결 재무제표 데이터프레임
+        :return:
+        """
+        if not self.__y_state__.empty:
+            return self.__y_state__
+
+        return pd.DataFrame()
+
+    @property
+    def q_state(self) -> pd.DataFrame:
+        """
+        분기 연결 재무제표 데이터프레임
+        :return:
+        """
+        if not self.__q_state__.empty:
+            return self.__q_state__
+        return pd.DataFrame()
