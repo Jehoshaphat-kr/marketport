@@ -2,13 +2,12 @@ import os
 import pandas as pd
 import numpy as np
 import tdatool as tt
-from tdatool.charts import tchart, fchart
 from datetime import datetime, timedelta
 from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
 from scipy.stats import linregress
 
 
-class TimeSeries(tchart):
+class timeseries:
     def __init__(
         self,
         ticker: str = '005930',
@@ -63,7 +62,7 @@ class TimeSeries(tchart):
         return self.__guide__
 
     @property
-    def trend(self):
+    def trend(self) -> pd.DataFrame:
         """
         일반 주가 추세 분석
         :return:
@@ -87,6 +86,26 @@ class TimeSeries(tchart):
             frame[f'd{col}'] = frame[col].diff()
             frame[f'd2{col}'] = frame[col].diff().diff()
         return frame
+
+    def trendpick(self, label:str) -> pd.DataFrame:
+        """
+        추세 분석 변곡점 감지
+        :param label: trend 데이터프레임 열 이름
+        :return:
+        """
+        objs = []
+        tr = self.trend[label].tolist()
+        sr = self.trend[f'd{label}'].tolist()
+        for n, date in enumerate(self.trend.index[1:]):
+            if sr[n-1] < 0 < sr[n]:
+                objs.append([date, tr[n], 'Buy', 'triangle-up', 'red'])
+            elif sr[n-1] > 0 > sr[n]:
+                objs.append([date, tr[n], 'Sell', 'triangle-down', 'blue'])
+            elif tr[n-1] < 0 < tr[n]:
+                objs.append([date, tr[n], 'Golden-Cross', 'star', 'gold'])
+            elif tr[n-1] > 0 > tr[n]:
+                objs.append([date, tr[n], 'Dead-Cross', 'x', 'black'])
+        return pd.DataFrame(data=objs, columns=['날짜', 'value', 'bs', 'symbol', 'color']).set_index(keys='날짜')
 
     @property
     def sma(self) -> pd.DataFrame:
@@ -173,11 +192,11 @@ class TimeSeries(tchart):
         m = line.values
         s = signal.values
         objs = []
-        for n, date in enumerate(self.__macd__.index[:-1]):
-            if m[n] < s[n] and m[n+1] > s[n+1]:
-                objs.append([date, m[n+1], 'Buy', 'triangle-up', 'red'])
-            elif m[n] > s[n] and m[n+1] < s[n+1]:
-                objs.append([date, m[n+1], 'Sell', 'triangle-down', 'blue'])
+        for n, date in enumerate(self.__macd__.index[1:]):
+            if m[n-1] < s[n-1] and m[n] > s[n]:
+                objs.append([date, m[n][0], 'Buy', 'triangle-up', 'red'])
+            elif m[n-1] > s[n-1] and m[n] < s[n]:
+                objs.append([date, m[n][0], 'Sell', 'triangle-down', 'blue'])
         pick = pd.DataFrame(data=objs, columns=['날짜', 'value', 'B/S', 'symbol', 'color']).set_index(keys='날짜')
         return self.__macd__, pick
 
@@ -256,7 +275,7 @@ class TimeSeries(tchart):
         return _limit_
 
 
-class Finances(fchart):
+class finances:
     def __init__(self, ticker:str):
         self.ticker = ticker
 

@@ -1,20 +1,12 @@
 import plotly.graph_objects as go
 import plotly.offline as of
 import pandas as pd
+from tdatool.frames import timeseries, finances
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
 
-class tchart:
-
-    ticker = ''
-    name = ''
-    price = pd.DataFrame()
-    guide = pd.DataFrame()
-    trend = pd.DataFrame()
-    bound = pd.DataFrame()
-    limit = pd.DataFrame()
-    macd = (pd.DataFrame(), pd.DataFrame())
+class Technical(timeseries):
 
     @staticmethod
     def format(span):
@@ -101,7 +93,7 @@ class tchart:
             name='종가',
             meta=self.format(span=price.index),
             line=dict(color='grey'),
-            hovertemplate='종가: %{y}원<br>날짜: %{meta}<extra></extra>'
+            hovertemplate='종가: %{y:,}원<br>날짜: %{meta}<extra></extra>'
         ))
 
         # 추세선
@@ -144,7 +136,7 @@ class tchart:
                 name=col,
                 visible=True if cond else 'legendonly',
                 meta=self.format(span=guide.index),
-                hovertemplate=col + ': %{y:,.2f}<br>날짜: %{meta}<extra></extra>'
+                hovertemplate=col + '<br>값: %{y:.2f}<br>날짜: %{meta}<extra></extra>'
             ))
 
         # 거래량
@@ -181,11 +173,13 @@ class tchart:
         :param save:
         :return:
         """
-        fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05,
+        fig = make_subplots(rows=2, cols=1, row_width=[0.2, 0.8], shared_xaxes=True, vertical_spacing=0.05,
                             specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
 
         # 종가 정보
         price = self.price['종가']
+        tic = price.index[0]
+        toc = price.index[-1]
         fig.add_trace(go.Scatter(
             x=price.index,
             y=price,
@@ -203,23 +197,42 @@ class tchart:
                 x=trend.index,
                 y=trend[col],
                 customdata=self.format(span=trend.index),
+                legendgroup=col,
                 name=col,
                 mode='lines',
                 showlegend=True,
-                visible=True if col.endswith('IIR') else 'legendonly',
+                visible='legendonly',
                 hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
+            ), row=1, col=1, secondary_y=True)
+
+            pick = self.trendpick(label=col)
+            fig.add_trace(go.Scatter(
+                x=pick.index,
+                y=pick['value'],
+                mode='markers',
+                text=pick['bs'],
+                meta=self.format(pick.index),
+                legendgroup=col,
+                showlegend=False,
+                marker=dict(
+                    color=pick['color'],
+                    symbol=pick['symbol']
+                ),
+                visible='legendonly',
+                hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>'
             ), row=1, col=1, secondary_y=True)
 
         # MACD
         data, pick = self.macd
         form = self.format(span=data.index)
-        for col in ['MACD', 'signal']:
+        for n, col in enumerate(['MACD', 'signal']):
             fig.add_trace(go.Scatter(
                 x=data.index,
                 y=data[col],
                 name='MACD-Sig' if col == 'signal' else col,
                 meta=form,
-                showlegend=True,
+                legendgroup='macd',
+                showlegend=True if not n else False,
                 hovertemplate=col+'<br>날짜: %{meta}<extra></extra>'
             ), row=2, col=1)
 
@@ -232,7 +245,7 @@ class tchart:
                 color=['blue' if v < 0 else 'red' for v in data['hist'].values]
             ),
             showlegend=False,
-            hovertemplate='날짜:%{customdata}<br>히스토그램:%{y:.2f}<extra></extra>'
+            hovertemplate='날짜:%{meta}<br>히스토그램:%{y:.2f}<extra></extra>'
         ), row=2, col=1)
 
         fig.add_trace(go.Scatter(
@@ -255,6 +268,7 @@ class tchart:
 
         layout = self.layout_basic(title='추세 분석 차트', x_title='', y_title='종가[KRW]')
         layout.update(dict(
+            xaxis=dict(range=[tic, toc]),
             xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
             yaxis2=dict(title='추세', showgrid=False, zeroline=True, zerolinecolor='grey', zerolinewidth=2),
             yaxis3=dict(title='MACD', showgrid=True, gridcolor='lightgrey')

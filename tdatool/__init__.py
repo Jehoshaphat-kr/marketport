@@ -1,4 +1,4 @@
-from tdatool.frames import TimeSeries, Finances
+from tdatool.charts import Technical
 import os
 import pandas as pd
 
