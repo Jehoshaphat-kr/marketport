@@ -1,13 +1,13 @@
-import os
 import pandas as pd
 import numpy as np
 import tdatool as tt
+from tdatool.toolkit import liner
 from datetime import datetime, timedelta
-from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
 from scipy.stats import linregress
 
 
-class timeseries:
+class timeseries(liner):
+
     def __init__(
         self,
         ticker: str = '005930',
@@ -23,10 +23,11 @@ class timeseries:
         self.filter_win = [5, 10, 20, 60, 120] if not filter_win else filter_win
         self.sr_diverse = sr_diverse
 
-        self.__price__ = pd.DataFrame()
-        self.__guide__ = pd.DataFrame()
-        self.__trend__ = pd.DataFrame()
-        self.__macd__ = pd.DataFrame()
+        self.__price__ = self.fetch(ticker=self.ticker, src=self.data_src)
+        self.__guide__ = self.calc_guide(series=self.__price__[self.filter_key], window=self.filter_win)
+        self.__trend__ = self.calc_trend(self.__guide__)
+        self.__macd__ = self.calc_macd(series=self.__price__[self.filter_key])
+        self.__detector__ = pd.DataFrame()
         return
 
     @property
@@ -35,19 +36,6 @@ class timeseries:
         시가, 저가, 고가, 종가, 거래량 시계열 데이터프레임
         :return:
         """
-        if not self.__price__.empty:
-            return self.__price__
-
-        self.__price__ = pd.read_csv(
-            f'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/series/{self.ticker}.csv',
-            encoding='utf-8',
-            index_col='날짜'
-        ) if self.data_src == 'online' else pd.read_csv(
-            os.path.join(tt.root, f'warehouse/series/{self.ticker}.csv'),
-            encoding='utf-8',
-            index_col='날짜'
-        )
-        self.__price__.index = pd.to_datetime(self.__price__.index)
         return self.__price__
 
     @property
@@ -56,9 +44,6 @@ class timeseries:
         주가 필터 선 데이터프레임
         :return:
         """
-        if not self.__guide__.empty:
-            return self.__guide__
-        self.__guide__ = pd.concat(objs=[self.sma, self.ema, self.fir, self.iir], axis=1)
         return self.__guide__
 
     @property
@@ -67,111 +52,7 @@ class timeseries:
         일반 주가 추세 분석
         :return:
         """
-        if not self.__trend__.empty:
-            return self.__trend__
-        rebase = self.guide.copy()
-        frame = pd.concat(objs={
-            '중장기IIR': rebase['IIR60D'] - rebase['EMA120D'],
-            '중기IIR': rebase['IIR60D'] - rebase['EMA60D'],
-            '중단기IIR': rebase['IIR20D'] - rebase['EMA60D'],
-            '중장기FIR': rebase['FIR60D'] - rebase['EMA120D'],
-            '중기FIR': rebase['FIR60D'] - rebase['EMA60D'],
-            '중단기FIR': rebase['FIR20D'] - rebase['EMA60D'],
-            '중장기SMA': rebase['SMA60D'] - rebase['SMA120D'],
-            '중단기SMA': rebase['SMA20D'] - rebase['SMA60D'],
-            '중장기EMA': rebase['EMA60D'] - rebase['EMA120D'],
-            '중단기EMA': rebase['EMA20D'] - rebase['EMA60D'],
-        }, axis=1)
-        for col in frame.columns:
-            frame[f'd{col}'] = frame[col].diff()
-            frame[f'd2{col}'] = frame[col].diff().diff()
-        return frame
-
-    def trendpick(self, label:str) -> pd.DataFrame:
-        """
-        추세 분석 변곡점 감지
-        :param label: trend 데이터프레임 열 이름
-        :return:
-        """
-        objs = []
-        tr = self.trend[label].tolist()
-        sr = self.trend[f'd{label}'].tolist()
-        for n, date in enumerate(self.trend.index[1:]):
-            if sr[n-1] < 0 < sr[n]:
-                objs.append([date, tr[n], 'Buy', 'triangle-up', 'red'])
-            elif sr[n-1] > 0 > sr[n]:
-                objs.append([date, tr[n], 'Sell', 'triangle-down', 'blue'])
-            elif tr[n-1] < 0 < tr[n]:
-                objs.append([date, tr[n], 'Golden-Cross', 'star', 'gold'])
-            elif tr[n-1] > 0 > tr[n]:
-                objs.append([date, tr[n], 'Dead-Cross', 'x', 'black'])
-        return pd.DataFrame(data=objs, columns=['날짜', 'value', 'bs', 'symbol', 'color']).set_index(keys='날짜')
-
-    @property
-    def sma(self) -> pd.DataFrame:
-        """
-        단순 이동 평균(Simple Moving Average) 필터
-        :return:
-        """
-        return pd.concat(
-            objs={f'SMA{win}D': self.price[self.filter_key].rolling(window=win).mean() for win in self.filter_win},
-            axis=1
-        )
-
-    @property
-    def ema(self) -> pd.DataFrame:
-        """
-        지수 이동 평균(Exponent Moving Average) 필터
-        :return:
-        """
-        return pd.concat(
-            objs={f'EMA{win}D': self.price[self.filter_key].ewm(span=win).mean() for win in self.filter_win},
-            axis=1
-        )
-
-    @property
-    def iir(self) -> pd.DataFrame:
-        """
-        scipy 패키지 Butterworth 기본 제공 필터 (IIR :: Uses Feedback)
-        :return:
-        """
-        objs = {}
-        for cutoff in self.filter_win:
-            normal_cutoff = (252 / cutoff) / (252 / 2)
-            coeff_a, coeff_b = butter(N=1, Wn=normal_cutoff, btype='lowpass', analog=False, output='ba')
-            objs[f'IIR{cutoff}D'] = pd.Series(
-                data=filtfilt(coeff_a, coeff_b, self.price[self.filter_key]),
-                index=self.price[self.filter_key].index
-            )
-        return pd.concat(objs=objs, axis=1)
-
-    @property
-    def fir(self) -> pd.DataFrame:
-        """
-        DEPRECATED :: scipy 패키지 FIR 필터
-        :return:
-        """
-        objs = {}
-        for cutoff in self.filter_win:
-            normal_cutoff = (252 / cutoff) / (252 / 2)
-            '''
-            ripple ::
-            width :: 클수록 Delay 상쇄/필터 성능 저하
-            '''
-            ripple, width = {
-                5: (10, 75 / (252 / 2)),
-                10: (12, 75 / (252 / 2)),
-                20: (20, 75 / (252 / 2)),
-                60: (60, 75 / (252 / 2)),
-                120: (80, 75 / (252 / 2)),
-            }[cutoff]
-            N, beta = kaiserord(ripple=ripple, width=width)
-            taps = firwin(N, normal_cutoff, window=('kaiser', beta))
-            objs[f'FIR{cutoff}D'] = pd.Series(
-                data=lfilter(taps, 1.0, self.price[self.filter_key]),
-                index=self.price[self.filter_key].index
-            )
-        return pd.concat(objs=objs, axis=1)
+        return self.__trend__
 
     @property
     def macd(self) -> (pd.DataFrame, pd.DataFrame):
@@ -179,26 +60,17 @@ class timeseries:
         Moving Average Convergence and Divergence
         :return:
         """
-        if not self.__macd__.empty:
-            return self.__macd__
-        exp1 = self.price[self.filter_key].ewm(span=12, adjust=False).mean()
-        exp2 = self.price[self.filter_key].ewm(span=26, adjust=False).mean()
-        line = pd.DataFrame(exp1 - exp2).rename(columns={self.filter_key: 'MACD'})
-        signal = pd.DataFrame(line.ewm(span=9, adjust=False).mean()).rename(columns={'MACD': 'signal'})
-        hist = pd.DataFrame(line['MACD'] - signal['signal']).rename(columns={0: 'hist'})
-        self.__macd__ = pd.concat(objs=[line, signal, hist], axis=1)
+        return self.__macd__
 
-        # MACD 기반 BUY/SELL 지점 판단
-        m = line.values
-        s = signal.values
-        objs = []
-        for n, date in enumerate(self.__macd__.index[1:]):
-            if m[n-1] < s[n-1] and m[n] > s[n]:
-                objs.append([date, m[n][0], 'Buy', 'triangle-up', 'red'])
-            elif m[n-1] > s[n-1] and m[n] < s[n]:
-                objs.append([date, m[n][0], 'Sell', 'triangle-down', 'blue'])
-        pick = pd.DataFrame(data=objs, columns=['날짜', 'value', 'B/S', 'symbol', 'color']).set_index(keys='날짜')
-        return self.__macd__, pick
+    @property
+    def detector(self) -> pd.DataFrame:
+        """
+        추세 분석 변곡점 감지
+        :return:
+        """
+        if self.__detector__.empty:
+            self.__detector__ = self.detect(dataframe=pd.concat(objs=[self.trend, self.macd], axis=1))
+        return self.__detector__
 
     @property
     def bound(self):
@@ -303,3 +175,12 @@ class finances:
         if not self.__q_state__.empty:
             return self.__q_state__
         return pd.DataFrame()
+
+if __name__ == "__main__":
+    api = timeseries(ticker='005930')
+    # print(api.price)
+    # print(api.guide)
+    # print(api.trend)
+    # print(api.macd)
+    # print(api.detector)
+    # print(api.detector['detMACD'].dropna())

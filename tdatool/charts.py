@@ -281,6 +281,6 @@ class Technical(timeseries):
             of.plot(fig, filename="chart-tendency.html", auto_open=False)
         return fig
 
-class fchart:
+class Fundamental:
     def layout_basic(self):
         return

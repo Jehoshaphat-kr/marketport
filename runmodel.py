@@ -2,14 +2,14 @@ import tdatool as tt
 
 if __name__ == "__main__":
     technical = tt.Technical(
-        ticker='101490',
+        ticker='036490',
         data_src='offline'
     )
     print(f'{technical.name}({technical.ticker}) 기술 분석')
-    # technical.s_price(show=False, save=True)
+    technical.s_price(show=False, save=True)
     technical.s_trend(show=False, save=True)
 
 
-    # fundamental = tt.Finances(
+    # fundamental = tt.Fundamental(
     #     ticker='011790'
     # )
