@@ -1,10 +1,12 @@
 import tdatool as tt
 import pandas as pd
+import numpy as np
 import os
 from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
+from datetime import timedelta
 
 
-class liner:
+class technical:
 
     @staticmethod
     def fetch(ticker:str, src:str) -> pd.DataFrame:
@@ -27,7 +29,7 @@ class liner:
         return __price__
 
     @staticmethod
-    def calc_guide(series:pd.Series, window:list) -> pd.DataFrame:
+    def calc_filter(series:pd.Series, window:list) -> pd.DataFrame:
         """
         주가 가이드(필터) 데이터프레임
         :param series: 필터 기준 주가(시가, 고가, 저가, 종가)
@@ -85,9 +87,9 @@ class liner:
         return pd.concat(objs={'MACD': macd, 'MACD-Sig': signal, 'MACD-Hist': hist}, axis=1)
 
     @staticmethod
-    def detect(dataframe:pd.DataFrame) -> pd.DataFrame:
+    def calc_trade_points(dataframe:pd.DataFrame) -> pd.DataFrame:
         """
-        주요 지표 변곡점 판단
+        주요 지표 매매 적합 판단지점
         :param dataframe: 주요 지표
         :return:
         """
@@ -109,3 +111,111 @@ class liner:
                     data.append([date, tr[n], 'Dead-Cross', 'x', 'black'])
             objs[f'det{col}'] = pd.DataFrame(data=data, columns=['날짜', 'value', 'bs', 'symbol', 'color']).set_index(keys='날짜')
         return pd.concat(objs=objs, axis=1)
+
+    @staticmethod
+    def calc_horizontal_line(dataframe:pd.DataFrame) -> pd.DataFrame:
+        """
+        수평 지지/저항선 데이터프레임
+        :param dataframe: 가격 데이터프레임
+        :return:
+        """
+        frm = dataframe[dataframe.index >= (dataframe.index[-1] - timedelta(180))].copy()
+        low = frm['저가']
+        high = frm['고가']
+        spread = (high - low).mean()
+
+        def is_support(i):
+            return low[i] < low[i - 1] < low[i - 2] and low[i] < low[i + 1] < low[i + 2]
+
+        def is_resistance(i):
+            return high[i] > high[i - 1] > high[i - 2] and high[i] > high[i + 1] > high[i + 2]
+
+        def is_far_from_level(l, lines):
+            return np.sum([abs(l - x) < spread for x in lines]) == 0
+
+        levels = []
+        data = []
+        for n, date in enumerate(frm.index[2: len(frm) - 2]):
+            if is_support(n) and is_far_from_level(l=low[n], lines=levels):
+                sample = (n, low[n])
+                levels.append(sample)
+                data.append(list(sample) + list((date, f'지지선@{date.strftime("%Y%m%d")[2:]}')))
+            elif is_resistance(n) and is_far_from_level(l=frm['고가'][n], lines=levels):
+                sample = (n, high[n])
+                levels.append(sample)
+                data.append(list(sample) + list((date, f'저항선@{date.strftime("%Y%m%d")[2:]}')))
+        return pd.DataFrame(data=data, columns=['ID', '가격', '날짜', '종류']).set_index(keys='날짜')
+
+
+class fundamental:
+
+    def fetch_statement(self, ticker) -> tuple:
+        """
+        1. 기업 개요
+        연결 제무제표 또는 별도 제무제표 유효성 판정
+        매출 추정치 존재 유무로 판정 (매출 추정치 존재 시 유효 판정)
+        index 11 = 연간 연결 제무제표
+        index 14 = 연간 별도 제무제표
+        :param ticker: 종목코드
+        :return:
+        """
+        link = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
+        table = pd.read_html(link % ticker, encoding='utf-8')
+        is_separate = table[11].iloc[0].isnull().sum() > table[14].iloc[0].isnull().sum()
+
+        a = table[14] if is_separate else table[11]
+        q = table[15] if is_separate else table[12]
+        return self.reform_statement(df=a), self.reform_statement(df=q)
+
+    def fetch_summary(self, ticker) -> pd.DataFrame:
+        """
+        1. 기업 정보
+        :param ticker: 종목코드
+        :return: 
+        """
+        link = "http://comp.fnguide.com/SVO2/ASP/SVD_Corp.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=&NewMenuID=102&stkGb=701"
+        table = pd.read_html(link % ticker, encoding='utf-8')
+        return pd.concat(objs=[
+            self.reform_sga(df=table[6]),
+            self.reform_sga(df=table[7]),
+            self.reform_rnd(df=table[8]),
+        ], axis=1).sort_index()
+
+    @staticmethod
+    def reform_statement(df:pd.DataFrame) -> pd.DataFrame:
+        """
+        기업 기본 재무정보
+        :param df: 원 데이터프레임
+        :return:
+        """
+        cols = df.columns.tolist()
+        df.set_index(keys=[cols[0]], inplace=True)
+        df.index.name = None
+        df.columns = df.columns.droplevel()
+        return df.T
+
+    @staticmethod
+    def reform_rnd(df:pd.DataFrame) -> pd.DataFrame:
+        """
+        R&D 투자 데이터프레임
+        :param df:
+        :return:
+        """
+        df.set_index(keys=['회계연도'], inplace=True)
+        df.index.name = None
+        df = df[['R&D 투자 총액 / 매출액 비중.1', '무형자산 처리 / 매출액 비중.1', '당기비용 처리 / 매출액 비중.1']]
+        df = df.rename(columns={'R&D 투자 총액 / 매출액 비중.1': 'R&D투자비중',
+                                  '무형자산 처리 / 매출액 비중.1': '무형자산처리비중',
+                                  '당기비용 처리 / 매출액 비중.1': '당기비용처리비중'})
+        return df
+
+    @staticmethod
+    def reform_sga(df:pd.DataFrame) -> pd.DataFrame:
+        """
+        SG & A: Sales, General, and Administrative(판관비) 또는 매출원가 데이터프레임
+        :param df: 원 데이터프레임
+        :return:
+        """
+        df.set_index(keys=['항목'], inplace=True)
+        df.index.name = None
+        return df.T

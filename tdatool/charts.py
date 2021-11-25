@@ -5,11 +5,22 @@ from tdatool.frames import timeseries, finances
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
-
+colors = [
+    '#1f77b4',  # muted blue
+    '#ff7f0e',  # safety orange
+    '#2ca02c',  # cooked asparagus green
+    '#d62728',  # brick red
+    '#9467bd',  # muted purple
+    '#8c564b',  # chestnut brown
+    '#e377c2',  # raspberry yogurt pink
+    '#7f7f7f',  # middle gray
+    '#bcbd22',  # curry yellow-green
+    '#17becf'   # blue-teal
+]
 class Technical(timeseries):
 
     @staticmethod
-    def format(span):
+    def reform(span):
         """
         날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
         :param span: 날짜 리스트
@@ -91,7 +102,7 @@ class Technical(timeseries):
             x=price.index,
             y=price['종가'],
             name='종가',
-            meta=self.format(span=price.index),
+            meta=self.reform(span=price.index),
             line=dict(color='grey'),
             hovertemplate='종가: %{y:,}원<br>날짜: %{meta}<extra></extra>'
         ))
@@ -111,12 +122,12 @@ class Technical(timeseries):
             ))
 
         # 지지/저항선
-        support_resist = self.limit.copy()
+        support_resist = self.h_support_resistance.copy()
         for n, date in enumerate(support_resist.index):
             name = support_resist.loc[date, '종류']
             fig.add_trace(go.Scatter(
                 x=[date + timedelta(dt) for dt in range(-20, 21)],
-                y=[support_resist.loc[date, '레벨']] * 40,
+                y=[support_resist.loc[date, '가격']] * 40,
                 mode='lines',
                 line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=2),
                 name='지지/저항선',
@@ -127,7 +138,7 @@ class Technical(timeseries):
             ))
 
         # 필터선
-        guide = self.guide.copy()
+        guide = self.filter_line.copy()
         for col in guide.columns:
             cond = col[-3:] == '60D' and (col.startswith('SMA') or col.startswith('IIR'))
             fig.add_trace(go.Scatter(
@@ -135,7 +146,7 @@ class Technical(timeseries):
                 y=guide[col],
                 name=col,
                 visible=True if cond else 'legendonly',
-                meta=self.format(span=guide.index),
+                meta=self.reform(span=guide.index),
                 hovertemplate=col + '<br>값: %{y:.2f}<br>날짜: %{meta}<extra></extra>'
             ))
 
@@ -144,7 +155,7 @@ class Technical(timeseries):
         fig.add_trace(go.Bar(
             x=volume.index,
             y=volume.values,
-            customdata=self.format(span=self.price.index),
+            customdata=self.reform(span=self.price.index),
             name='거래량',
             marker=dict(
                 color=['blue' if self.price.loc[d, '시가'] > self.price.loc[d, '종가'] else 'red' for d in volume.index]
@@ -183,20 +194,21 @@ class Technical(timeseries):
         fig.add_trace(go.Scatter(
             x=price.index,
             y=price,
-            meta=self.format(span=price.index),
+            meta=self.reform(span=price.index),
             name='종가',
             hovertemplate='날짜: %{meta}<br>종가: %{y:,}원<extra></extra>'
         ), row=1, col=1, secondary_y=False)
 
         # 추세선
-        trend = self.trend.copy()
+        point = self.trade_points.copy()
+        trend = self.trend_line.copy()
         for col in trend.columns:
             if col.startswith('d'):
                 continue
             fig.add_trace(go.Scatter(
                 x=trend.index,
                 y=trend[col],
-                customdata=self.format(span=trend.index),
+                customdata=self.reform(span=trend.index),
                 legendgroup=col,
                 name=col,
                 mode='lines',
@@ -205,13 +217,13 @@ class Technical(timeseries):
                 hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
             ), row=1, col=1, secondary_y=True)
 
-            pick = self.trendpick(label=col)
+            pick = point[f'det{col}'].dropna()
             fig.add_trace(go.Scatter(
                 x=pick.index,
                 y=pick['value'],
                 mode='markers',
                 text=pick['bs'],
-                meta=self.format(pick.index),
+                meta=self.reform(pick.index),
                 legendgroup=col,
                 showlegend=False,
                 marker=dict(
@@ -223,13 +235,13 @@ class Technical(timeseries):
             ), row=1, col=1, secondary_y=True)
 
         # MACD
-        data, pick = self.macd
-        form = self.format(span=data.index)
-        for n, col in enumerate(['MACD', 'signal']):
+        data = self.macd
+        form = self.reform(span=data.index)
+        for n, col in enumerate(['MACD', 'MACD-Sig']):
             fig.add_trace(go.Scatter(
                 x=data.index,
                 y=data[col],
-                name='MACD-Sig' if col == 'signal' else col,
+                name=col,
                 meta=form,
                 legendgroup='macd',
                 showlegend=True if not n else False,
@@ -238,32 +250,30 @@ class Technical(timeseries):
 
         fig.add_trace(go.Bar(
             x=data.index,
-            y=data['hist'],
+            y=data['MACD-Hist'],
             meta=form,
             name='MACD-Hist',
             marker=dict(
-                color=['blue' if v < 0 else 'red' for v in data['hist'].values]
+                color=['blue' if v < 0 else 'red' for v in data['MACD-Hist'].values]
             ),
             showlegend=False,
             hovertemplate='날짜:%{meta}<br>히스토그램:%{y:.2f}<extra></extra>'
         ), row=2, col=1)
 
+        pick = point['detMACD'].dropna()
         fig.add_trace(go.Scatter(
             x=pick.index,
             y=pick['value'],
-            name='MACD B/S',
             mode='markers',
             marker=dict(
                 symbol=pick['symbol'],
                 color=pick['color'],
-                size=7
             ),
-            text=pick['B/S'],
-            meta=self.format(span=pick.index),
-            opacity=0.7,
+            text=pick['bs'],
+            meta=self.reform(span=pick.index),
             hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>',
-            visible='legendonly',
-            showlegend=True
+            legendgroup='macd',
+            showlegend=False
         ), row=2, col=1)
 
         layout = self.layout_basic(title='추세 분석 차트', x_title='', y_title='종가[KRW]')
@@ -281,6 +291,75 @@ class Technical(timeseries):
             of.plot(fig, filename="chart-tendency.html", auto_open=False)
         return fig
 
-class Fundamental:
+class Fundamental(finances):
     def layout_basic(self):
         return
+    
+    def show_sales(self, save:bool=False, show:bool=False) -> go.Figure:
+        """
+        [연간][분기] 매출/영업이익/당기순이익 및 판관비, 매출원가
+        :param save: 
+        :param show: 
+        :return: 
+        """
+        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
+                            subplot_titles=("연간 실적", "분기 실적", "SG&A, 매출원가 및 R&D투자", "자산"))
+
+        df_a = self.annual_statement
+        df_q = self.quarter_statement
+        key = '매출액'
+        key = '순영업수익' if '순영업수익' in df_a.columns else key
+        key = '보험료수익' if '보험료수익' in df_a.columns else key
+
+        for n, col in enumerate(['시가총액', key, '영업이익', '당기순이익']):
+            y = df_a[col].fillna(0).astype(int)
+            fig.add_trace(go.Bar(
+                x=df_a.index,
+                y=y,
+                name=f'연간{col}',
+                marker=dict(color=colors[n]),
+                meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
+                hovertemplate='%{x}<br>' + col + ': %{meta}억원<extra></extra>',
+            ), row=1, col=1)
+
+            y = df_q[col].fillna(0).astype(int)
+            fig.add_trace(go.Bar(
+                x=df_q.index,
+                y=y,
+                name=f'분기{col}',
+                marker=dict(color=colors[n]),
+                meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
+                hovertemplate='%{x}<br>' + col + ': %{meta}억원<extra></extra>',
+            ), row=1, col=2)
+        
+        for n, col in enumerate(self.summary.columns):
+            if col in ['무형자산처리비중', '당기비용처리비중']:
+                continue
+            fig.add_trace(go.Bar(
+                x=self.summary.index,
+                y=self.summary[col].astype(float),
+                name=col,
+                hovertemplate='%{x}<br>' + col + ': %{y}%<extra></extra>',
+            ), row=2, col=1)
+
+        asset = df_a['자산총계']
+        for n, col in enumerate(['부채총계', '자본총계']):
+            name = col.replace('총계','')
+            y = df_a[col].astype(int)
+            fig.add_trace(go.Bar(
+                x=df_a.index,
+                y=y,
+                name=name,
+                meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in asset],
+                customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
+                base='overlay',
+                hovertemplate='%{x}<br>' + name + ': %{customdata}억원<br>총자산: %{meta}억원<extra></extra>',
+                offsetgroup=0,
+                opacity=0.5 if n else 1.0
+            ), row=2, col=2)
+
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-sales.html", auto_open=False)
+        return fig

@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 import tdatool as tt
-from tdatool.toolkit import liner
+from tdatool.toolkit import technical, fundamental
 from datetime import datetime, timedelta
 from scipy.stats import linregress
+from pykrx import stock
 
 
-class timeseries(liner):
+class timeseries(technical):
 
     def __init__(
         self,
@@ -24,7 +25,7 @@ class timeseries(liner):
         self.sr_diverse = sr_diverse
 
         self.__price__ = self.fetch(ticker=self.ticker, src=self.data_src)
-        self.__guide__ = self.calc_guide(series=self.__price__[self.filter_key], window=self.filter_win)
+        self.__guide__ = self.calc_filter(series=self.__price__[self.filter_key], window=self.filter_win)
         self.__trend__ = self.calc_trend(self.__guide__)
         self.__macd__ = self.calc_macd(series=self.__price__[self.filter_key])
         self.__detector__ = pd.DataFrame()
@@ -39,7 +40,7 @@ class timeseries(liner):
         return self.__price__
 
     @property
-    def guide(self) -> pd.DataFrame:
+    def filter_line(self) -> pd.DataFrame:
         """
         주가 필터 선 데이터프레임
         :return:
@@ -47,7 +48,7 @@ class timeseries(liner):
         return self.__guide__
 
     @property
-    def trend(self) -> pd.DataFrame:
+    def trend_line(self) -> pd.DataFrame:
         """
         일반 주가 추세 분석
         :return:
@@ -63,13 +64,13 @@ class timeseries(liner):
         return self.__macd__
 
     @property
-    def detector(self) -> pd.DataFrame:
+    def trade_points(self) -> pd.DataFrame:
         """
         추세 분석 변곡점 감지
         :return:
         """
         if self.__detector__.empty:
-            self.__detector__ = self.detect(dataframe=pd.concat(objs=[self.trend, self.macd], axis=1))
+            self.__detector__ = self.calc_trade_points(dataframe=pd.concat(objs=[self.trend_line, self.macd], axis=1))
         return self.__detector__
 
     @property
@@ -103,84 +104,54 @@ class timeseries(liner):
         return pd.concat(objs=objs, axis=1)
 
     @property
-    def limit(self) -> pd.DataFrame:
+    def h_support_resistance(self) -> pd.DataFrame:
         """
-        지지선/저항선 표기
+        지지선/저항선 데이터프레임
         :return:
         """
-        def is_support(df, i):
-            _ = df['저가']
-            support = _[i] < _[i - 1] < _[i - 2] and _[i] < _[i + 1] < _[i + 2]
-            return support
-
-        def is_resistance(df, i):
-            _ = df['고가']
-            resistance = _[i] > _[i - 1] > _[i - 2] and _[i] > _[i + 1] > _[i + 2]
-            return resistance
-
-        def is_far_from_level(l, s, lines):
-            return np.sum([abs(l - x) < s for x in lines]) == 0
-
-        frm = self.price[self.price.index >= (self.price.index[-1] - timedelta(180))].copy()
-        s_hat = np.mean(frm['고가'] - frm['저가'])
-
-        levels = []
-        index = []
-        types = []
-        s_cnt = 1
-        r_cnt = 1
-        for n, date in enumerate(frm.index[2: len(frm) - 2]):
-            if is_support(frm, n):
-                if is_far_from_level(l=frm['저가'][n], s=s_hat, lines=levels):
-                    levels.append((n, frm['저가'][n]))
-                    index.append(date)
-                    types.append(f'지지선{s_cnt}')
-                    s_cnt += 1
-            elif is_resistance(frm, n):
-                if is_far_from_level(l=frm['고가'][n], s=s_hat, lines=levels):
-                    levels.append((n, frm['고가'][n]))
-                    index.append(date)
-                    types.append(f'저항선{r_cnt}')
-                    r_cnt += 1
-        _limit_ = pd.DataFrame(levels, columns=['N', '레벨'], index=index)
-        _limit_['종류'] = types
-        return _limit_
+        return self.calc_horizontal_line(dataframe=self.price)
 
 
-class finances:
+
+class finances(fundamental):
     def __init__(self, ticker:str):
         self.ticker = ticker
-
-        self.__y_state__ = pd.DataFrame()
-        self.__q_state__ = pd.DataFrame()
+        self.name = tt.meta.loc[ticker, '종목명']
+        self.annual_statement, self.quarter_statement = self.fetch_statement(ticker=ticker)
+        self.summary = self.fetch_summary(ticker=ticker)
+        self.update_cap()
         return
 
-    @property
-    def y_state(self) -> pd.DataFrame:
+    def update_cap(self) -> None:
         """
-        연간 연결 재무제표 데이터프레임
+        기말 시가총액 정보 추가
         :return:
         """
-        if not self.__y_state__.empty:
-            return self.__y_state__
+        a_period = self.annual_statement.index
+        fromdate = a_period[0].replace('/','') + '20'
+        todate = datetime.today().strftime("%Y%m%d")
+        cap = stock.get_market_cap_by_date(fromdate=fromdate, todate=todate, ticker=self.ticker, freq='m')
+        cap['ID'] = [date.strftime("%Y/%m") for date in cap.index]
+        cap['시가총액'] = (cap['시가총액']/100000000).astype(int)
 
-        return pd.DataFrame()
+        a_key = [i[:-3] if i.endswith(')') else i for i in self.annual_statement.index]
+        q_key = [i[:-3] if i.endswith(')') else i for i in self.quarter_statement.index]
+        a_cap = cap[cap['ID'].isin(a_key)][['ID', '시가총액']].copy().set_index(keys='ID')
+        q_cap = cap[cap['ID'].isin(q_key)][['ID', '시가총액']].copy().set_index(keys='ID')
+        self.annual_statement = self.annual_statement.join(a_cap, how='left')
+        self.quarter_statement = self.quarter_statement.join(q_cap, how='left')
+        return
 
-    @property
-    def q_state(self) -> pd.DataFrame:
-        """
-        분기 연결 재무제표 데이터프레임
-        :return:
-        """
-        if not self.__q_state__.empty:
-            return self.__q_state__
-        return pd.DataFrame()
 
 if __name__ == "__main__":
-    api = timeseries(ticker='005930')
+    # api = timeseries(ticker='005930')
     # print(api.price)
     # print(api.guide)
     # print(api.trend)
     # print(api.macd)
     # print(api.detector)
     # print(api.detector['detMACD'].dropna())
+
+    api = finances(ticker='000660')
+    # print(api.annual_statement)
+    # print(api.quarter_statement)
