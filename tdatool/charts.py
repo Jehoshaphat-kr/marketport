@@ -294,10 +294,10 @@ class Technical(timeseries):
 class Fundamental(finances):
     def layout_basic(self):
         return
-    
+
     def show_sales(self, save:bool=False, show:bool=False) -> go.Figure:
         """
-        [연간][분기] 매출/영업이익/당기순이익 및 판관비, 매출원가
+        [연간][분기] 매출/영업이익/당기순이익 및 판관비, 매출원가, 자산
         :param save: 
         :param show: 
         :return: 
@@ -318,8 +318,10 @@ class Fundamental(finances):
                 y=y,
                 name=f'연간{col}',
                 marker=dict(color=colors[n]),
+                legendgroup=col,
                 meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
-                hovertemplate='%{x}<br>' + col + ': %{meta}억원<extra></extra>',
+                hovertemplate=col + ': %{meta}억원<extra></extra>',
+                opacity=0.9,
             ), row=1, col=1)
 
             y = df_q[col].fillna(0).astype(int)
@@ -328,8 +330,10 @@ class Fundamental(finances):
                 y=y,
                 name=f'분기{col}',
                 marker=dict(color=colors[n]),
+                legendgroup=col,
                 meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
-                hovertemplate='%{x}<br>' + col + ': %{meta}억원<extra></extra>',
+                hovertemplate=col + ': %{meta}억원<extra></extra>',
+                opacity=0.9,
             ), row=1, col=2)
         
         for n, col in enumerate(self.summary.columns):
@@ -339,27 +343,49 @@ class Fundamental(finances):
                 x=self.summary.index,
                 y=self.summary[col].astype(float),
                 name=col,
-                hovertemplate='%{x}<br>' + col + ': %{y}%<extra></extra>',
+                hovertemplate=col + ': %{y}%<extra></extra>',
+                opacity=0.9,
             ), row=2, col=1)
 
-        asset = df_a['자산총계']
-        for n, col in enumerate(['부채총계', '자본총계']):
-            name = col.replace('총계','')
-            y = df_a[col].astype(int)
-            fig.add_trace(go.Bar(
-                x=df_a.index,
-                y=y,
-                name=name,
-                meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in asset],
-                customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
-                base='overlay',
-                hovertemplate='%{x}<br>' + name + ': %{customdata}억원<br>총자산: %{meta}억원<extra></extra>',
-                offsetgroup=0,
-                opacity=0.5 if n else 1.0
-            ), row=2, col=2)
+        fig.add_trace(go.Bar(
+            x=df_a.index,
+            y=df_a['자산총계'].astype(int),
+            name='자산',
+            text=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['자산총계'].astype(int)],
+            meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['부채총계'].astype(int)],
+            customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['자본총계'].astype(int)],
+            hovertemplate='자산: %{text}억원<br>부채: %{meta}억원<br>자본: %{customdata}억원<extra></extra>',
+            texttemplate=' ',
+            marker=dict(color='green'),
+            offsetgroup=0,
+            opacity=0.9,
+            showlegend=False
+        ), row=2, col=2)
+
+        fig.add_trace(go.Bar(
+            x=df_a.index,
+            y=df_a['부채총계'].astype(int),
+            name='부채',
+            hoverinfo='skip',
+            marker=dict(color='red'),
+            offsetgroup=0,
+            opacity=0.8,
+            showlegend=False
+        ), row=2, col=2)
+
+        fig.update_layout(dict(
+            plot_bgcolor='white'
+        ))
+        fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=1)
+        fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=2)
+        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=2, col=1)
+        fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=2, col=2)
 
         if show:
             fig.show()
         if save:
             of.plot(fig, filename="chart-sales.html", auto_open=False)
         return fig
+
+    def show_multiple(self, ):
+        return

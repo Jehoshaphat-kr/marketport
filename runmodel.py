@@ -10,4 +10,5 @@ if __name__ == "__main__":
 
     fundamental = tt.Fundamental(ticker=ticker)
     print(f'{fundamental.name}({fundamental.ticker}) 기본적 분석')
+
     fundamental.show_sales(show=False, save=True)

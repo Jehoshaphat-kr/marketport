@@ -1,7 +1,8 @@
 import tdatool as tt
 import pandas as pd
 import numpy as np
-import os
+import os, requests
+from bs4 import BeautifulSoup as Soup
 from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
 from datetime import timedelta
 
@@ -148,6 +149,19 @@ class technical:
 
 
 class fundamental:
+    @staticmethod
+    def fetch_info(ticker) -> str:
+        """
+        기업 소개
+        :param ticker: 종목코드
+        :return:
+        """
+        link = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
+
+        html = requests.get(link % ticker).content
+        soup = Soup(html, 'lxml')
+        texts = soup.find('ul', id='bizSummaryContent').find_all('li')
+        return '\n'.join([text.text.replace('&nbsp;', ' ') for text in texts])
 
     def fetch_statement(self, ticker) -> tuple:
         """
@@ -165,7 +179,7 @@ class fundamental:
 
         a = table[14] if is_separate else table[11]
         q = table[15] if is_separate else table[12]
-        return self.reform_statement(df=a), self.reform_statement(df=q)
+        return self.reform_statement(df=a), self.reform_statement(df=q), self.reform_consensus(df=table[7])
 
     def fetch_summary(self, ticker) -> pd.DataFrame:
         """
@@ -180,6 +194,13 @@ class fundamental:
             self.reform_sga(df=table[7]),
             self.reform_rnd(df=table[8]),
         ], axis=1).sort_index()
+
+    def fetch_factor(self, ticker):
+        link1 = "http://comp.fnguide.com/SVO2/common/chartListPopup2.asp?oid=div5_img&cid=05_05&gicode=A"
+        link2 = "&filter=D&term=Y&etc=0&etc2=0&titleTxt=%EB%A9%80%ED%8B%B0%ED%8C%A9%ED%84%B0%20%EC%8A%A4%ED%83%80%EC%9D%BC%20%EB%B6%84%EC%84%9D&dateTxt=undefined&unitTxt="
+        html = requests.get(link1 + ticker + link2)
+        print(html.text)
+        return
 
     @staticmethod
     def reform_statement(df:pd.DataFrame) -> pd.DataFrame:
@@ -219,3 +240,22 @@ class fundamental:
         df.set_index(keys=['항목'], inplace=True)
         df.index.name = None
         return df.T
+
+    @staticmethod
+    def reform_consensus(df:pd.DataFrame) -> pd.DataFrame:
+        """
+        투자 컨센서스 데이터프레임
+        :param df: 원 데이터프레임
+        :return:
+        """
+        df['투자의견'] = df['투자의견'].astype(str)
+        df['목표주가'] = df['목표주가'].apply(lambda x: "{:,}원".format(x))
+        df['EPS'] = df['EPS'].apply(lambda x: "{:,}원".format(x))
+        df['PER'] = df['PER'].astype(str)
+        return df
+
+if __name__ == "__main__":
+    api = fundamental()
+    # api.fetch_statement(ticker='000660')
+    # api.fetch_info(ticker='000660')
+    api.fetch_factor(ticker='000660')

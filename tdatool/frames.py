@@ -117,7 +117,8 @@ class finances(fundamental):
     def __init__(self, ticker:str):
         self.ticker = ticker
         self.name = tt.meta.loc[ticker, '종목명']
-        self.annual_statement, self.quarter_statement = self.fetch_statement(ticker=ticker)
+
+        self.annual_statement, self.quarter_statement, self.consensus = self.fetch_statement(ticker=ticker)
         self.summary = self.fetch_summary(ticker=ticker)
         self.update_cap()
         return
@@ -141,6 +142,10 @@ class finances(fundamental):
         self.annual_statement = self.annual_statement.join(a_cap, how='left')
         self.quarter_statement = self.quarter_statement.join(q_cap, how='left')
         return
+
+    @property
+    def business_summary(self) -> str:
+        return self.fetch_info(ticker=self.ticker)
 
 
 if __name__ == "__main__":
