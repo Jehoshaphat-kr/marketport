@@ -1,4 +1,4 @@
-from tdatool.charts import Technical, Fundamental
+from tdatool.analytics import Technical, Fundamental
 import os
 import pandas as pd
 

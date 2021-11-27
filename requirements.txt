@@ -6,3 +6,5 @@ jsmin
 plotly
 scipy
 pyautogui
+requests
+bs4
