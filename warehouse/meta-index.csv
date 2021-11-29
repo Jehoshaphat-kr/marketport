@@ -115,7 +115,6 @@
 5064,KRX 정보기술,KX
 5065,KRX 유틸리티,KX
 5300,KRX 300,KX
-5301,KRX Mid 200,KX
 5351,KRX 300 정보기술,KX
 5352,KRX 300 금융,KX
 5353,KRX 300 자유소비재,KX
@@ -136,7 +135,6 @@
 1243,리츠인프라·우선주 혼합지수,TM
 1283,코스피 200 기후변화지수,TM
 2331,코스닥 150 거버넌스 지수,TM
-5104,KRX 고배당 50,TM
 5106,KRX ESG Leaders 150,TM
 5107,KRX Governance Leaders 100,TM
 5108,KRX Eco Leaders 100,TM
@@ -148,4 +146,7 @@
 5415,KRX 게임 K-뉴딜지수,TM
 5418,KRX 300 기후변화지수,TM
 5419,KRX 기후변화 솔루션지수,TM
+5420,KRX 블루칩 25,TM
+5421,KRX 전기차 Top 15,TM
+5422,KRX 반도체 Top 15,TM
 G004,KRX/S&P 탄소효율 그린뉴딜지수,TM
