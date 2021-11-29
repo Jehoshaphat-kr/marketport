@@ -301,7 +301,10 @@ class Fundamental(fundamental):
 
     def show_sales(self, save:bool=False, show:bool=False) -> go.Figure:
         """
-        [연간][분기] 매출/영업이익/당기순이익 및 판관비, 매출원가, 자산
+        [0, 0] 연간 시가총액/매출/영업이익/당기순이익
+        [0, 1] 분기 시가총액/매출/영업이익/당기순이익
+        [1, 0] 판관비/매출원가/R&D투자비융
+        [1, 1] 자산/부채/자본
         :param save:
         :param show:
         :return:
@@ -393,5 +396,21 @@ class Fundamental(fundamental):
             of.plot(fig, filename="chart-sales.html", auto_open=False)
         return fig
 
-    def show_multiple(self, ):
-        return
+    def show_multiple(self, save:bool=False, show:bool=False) -> go.Figure:
+        """
+        [0, 0] 연간 재무비율:: ROE/ROA/영업이익률
+        [0, 1] 분기 재무비율:: ROE/ROA/영업이익률
+        [1, 0] 연간 투자배수:: PER/PBR/PSR/PEG
+        [1, 1] 배당 수익률
+
+        :param save:
+        :param show:
+        :return:
+        """
+        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
+                            subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "자산"))
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename="chart-sales.html", auto_open=False)
+        return fig
