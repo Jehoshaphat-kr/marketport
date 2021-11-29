@@ -92,11 +92,10 @@ class Technical(technical):
             low=price['저가'],
             close=price['종가'],
             increasing_line=dict(color='red'),
-            decreasing_line=dict(color='blue'),
+            decreasing_line=dict(color='royalblue'),
             name='일봉',
-            visible='legendonly',
             showlegend=True,
-            legendgroup='가격'
+            legendgroup='일봉'
         ))
 
         # 가격차트::종가
@@ -107,6 +106,7 @@ class Technical(technical):
             meta=self.reform(span=price.index),
             line=dict(color='grey'),
             hovertemplate='종가: %{y:,}원<br>날짜: %{meta}<extra></extra>',
+            visible='legendonly',
             legendgroup='가격'
         ))
 
@@ -140,18 +140,35 @@ class Technical(technical):
                 hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y:,}원<extra></extra>'
             ))
 
+        # 볼린저 밴드
+        band = self.bollinger.copy()
+        for n, col in enumerate(band.columns):
+            name = '하한선' if n else '상한선'
+            fig.add_trace(go.Scatter(
+                x=band.index,
+                y=band[col].astype(int),
+                name='볼린저밴드',
+                fill='tonexty' if n else None,
+                legendgroup='볼린저밴드',
+                showlegend=False if n else True,
+                visible='legendonly',
+                meta=self.reform(span=band.index),
+                hovertemplate=name + '<br>날짜: %{meta}<br>값: %{y:,}원<extra></extra>',
+            ))
+
         # 필터선
         guide = self.filters.copy()
         for col in guide.columns:
-            cond = col[-3:] == '60D' and (col.startswith('SMA') or col.startswith('IIR'))
+            if col.startswith('FIR') or col.startswith('EMA'):
+                continue
             fig.add_trace(go.Scatter(
                 x=guide.index,
                 y=guide[col],
                 name=col,
-                visible=True if cond else 'legendonly',
+                legendgroup=col,
+                visible='legendonly',
                 meta=self.reform(span=guide.index),
                 hovertemplate=col + '<br>값: %{y:.2f}<br>날짜: %{meta}<extra></extra>',
-                legendgroup='필터선'
             ))
 
         # 거래량
@@ -189,7 +206,7 @@ class Technical(technical):
         :return:
         """
         fig = make_subplots(rows=2, cols=1, row_width=[0.2, 0.8], shared_xaxes=True, vertical_spacing=0.05,
-                            specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
+                            specs=[[{"secondary_y": True}], [{"secondary_y": True}]])
 
         # 종가 정보
         price = self.price['종가']
@@ -235,7 +252,7 @@ class Technical(technical):
                     symbol=pick['symbol']
                 ),
                 visible='legendonly',
-                hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>'
+                hovertemplate='%{text}<br>날짜: %{meta}<br>값: %{y}<extra></extra>'
             ), row=1, col=1, secondary_y=True)
 
         # MACD
@@ -250,7 +267,7 @@ class Technical(technical):
                 legendgroup='macd',
                 showlegend=True if not n else False,
                 hovertemplate=col+'<br>날짜: %{meta}<extra></extra>'
-            ), row=2, col=1)
+            ), row=2, col=1, secondary_y=False)
 
         fig.add_trace(go.Bar(
             x=data.index,
@@ -262,7 +279,7 @@ class Technical(technical):
             ),
             showlegend=False,
             hovertemplate='날짜:%{meta}<br>히스토그램:%{y:.2f}<extra></extra>'
-        ), row=2, col=1)
+        ), row=2, col=1, secondary_y=True)
 
         pick = point['detMACD'].dropna()
         fig.add_trace(go.Scatter(
@@ -343,11 +360,9 @@ class Fundamental(fundamental):
                 opacity=0.9,
             ), row=1, col=2)
 
-        summary = pd.concat(objs=[self.sg_a, self.sales_cost, self.rnd_invest], axis=1)
+        summary = pd.concat(objs=[self.sg_a, self.sales_cost, self.rnd_invest['R&D투자비중']], axis=1)
         summary.sort_index(inplace=True)
         for n, col in enumerate(summary.columns):
-            if col in ['무형자산처리비중', '당기비용처리비중']:
-                continue
             fig.add_trace(go.Bar(
                 x=summary.index,
                 y=summary[col].astype(float),
@@ -383,6 +398,7 @@ class Fundamental(fundamental):
         ), row=2, col=2)
 
         fig.update_layout(dict(
+            title=f'<b>{self.name}[{self.ticker}]</b> : 실적, 지출 및 자산',
             plot_bgcolor='white'
         ))
         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=1)
@@ -408,9 +424,60 @@ class Fundamental(fundamental):
         :return:
         """
         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
-                            subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "자산"))
+                            subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "EPS, BPS"))
+
+        df_a = self.annual_statement
+        df_q = self.quarter_statement
+        for n, col in enumerate(['ROA', 'ROE', '영업이익률']):
+            fig.add_trace(go.Bar(
+                x=df_a.index,
+                y=df_a[col],
+                name=f'연간{col}',
+                marker=dict(color=colors[n]),
+                legendgroup=col,
+                hovertemplate=col + ': %{y}%<extra></extra>',
+                opacity=0.9,
+            ), row=1, col=1)
+
+            fig.add_trace(go.Bar(
+                x=df_q.index,
+                y=df_q[col],
+                name=f'분기{col}',
+                marker=dict(color=colors[n]),
+                legendgroup=col,
+                hovertemplate=col + ': %{y}%<extra></extra>',
+                opacity=0.9,
+            ), row=1, col=2)
+
+        for n, col in enumerate(['PER', 'PBR', 'PSR', 'PEG']):
+            fig.add_trace(go.Bar(
+                x=df_a.index,
+                y=df_a[col],
+                name=col,
+                hovertemplate=col + ': %{y}<extra></extra>',
+                opacity=0.9
+            ), row=2, col=1)
+
+        for n, col in enumerate(['EPS(원)', 'BPS(원)']):
+            fig.add_trace(go.Bar(
+                x=df_a.index,
+                y=df_a[col],
+                name=col.replace("(원)", ""),
+                hovertemplate=col + ': %{y:,}원<extra></extra>',
+                opacity=0.9
+            ), row=2, col=2)
+
+        fig.update_layout(dict(
+            title=f'<b>{self.name}[{self.ticker}]</b> : 투자 비율 및 배수',
+            plot_bgcolor='white'
+        ))
+        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=1)
+        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=2)
+        fig.update_yaxes(title_text="-", gridcolor='lightgrey', row=2, col=1)
+        fig.update_yaxes(title_text="원", gridcolor='lightgrey', row=2, col=2)
+
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename="chart-sales.html", auto_open=False)
+            of.plot(fig, filename="chart-multiples.html", auto_open=False)
         return fig

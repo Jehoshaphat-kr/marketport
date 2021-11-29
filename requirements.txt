@@ -8,3 +8,4 @@ scipy
 pyautogui
 requests
 bs4
+selenium

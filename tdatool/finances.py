@@ -104,16 +104,20 @@ class fundamental:
         :param df: 원 데이터프레임
         :return:
         """
-        cols = df.columns.tolist()
-        df.set_index(keys=[cols[0]], inplace=True)
-        df.index.name = None
-        df.columns = df.columns.droplevel()
-        df = df.T
+        df_copy = df.copy()
+        cols = df_copy.columns.tolist()
+        df_copy.set_index(keys=[cols[0]], inplace=True)
+        df_copy.index.name = None
+        df_copy.columns = df_copy.columns.droplevel()
+        df_copy = df_copy.T
 
-        key = [i[:-3] if i.endswith(')') else i for i in df.index]
+        key = [i[:-3] if i.endswith(')') else i for i in df_copy.index]
         cap = self.cap[self.cap['ID'].isin(key)][['ID', '시가총액']].copy().set_index(keys='ID')
-        df = df.join(cap, how='left')
-        return df
+        df_copy = df_copy.join(cap, how='left')
+        df_copy['PSR'] = round(df_copy['시가총액'] / df_copy[df_copy.columns[0]], 2)
+        peg = (df_copy['PER'] / (100*df_copy['EPS(원)'].pct_change())).values
+        df_copy['PEG'] = [round(v, 2) if v > 0 else 0 for v in peg]
+        return df_copy
 
     @staticmethod
     def reform_rnd(df:pd.DataFrame) -> pd.DataFrame:
@@ -128,6 +132,8 @@ class fundamental:
         df = df.rename(columns={'R&D 투자 총액 / 매출액 비중.1': 'R&D투자비중',
                                   '무형자산 처리 / 매출액 비중.1': '무형자산처리비중',
                                   '당기비용 처리 / 매출액 비중.1': '당기비용처리비중'})
+        if '관련 데이터가 없습니다.' in df.index:
+            df.drop(index=['관련 데이터가 없습니다.'], inplace=True)
         return df
 
     @staticmethod
@@ -155,12 +161,17 @@ class fundamental:
         return df
 
 if __name__ == "__main__":
-    api = fundamental(ticker='000660')
+    # api = fundamental(ticker='000660')
     # print(api.annual_statement)
+    # print(api.annual_statement['PEG'])
     # print(api.quarter_statement)
     # print(api.consensus)
-    print(api.sales_product)
-    print(api.market_share)
-    print(api.sg_a)
-    print(api.sales_cost)
-    print(api.rnd_invest)
+    # print(api.sales_product)
+    # print(api.market_share)
+    # print(api.sg_a)
+    # print(api.sales_cost)
+    # print(api.rnd_invest)
+
+    url = 'http://comp.fnguide.com/SVO2/common/chartListPopup2.asp?oid=div5_img&cid=05_05&gicode=A000660&filter=D&term=Y&etc=0&etc2=0&titleTxt=%EB%A9%80%ED%8B%B0%ED%8C%A9%ED%84%B0%20%EC%8A%A4%ED%83%80%EC%9D%BC%20%EB%B6%84%EC%84%9D&dateTxt=undefined&unitTxt='
+    a = requests.get(url=url)
+    print(a.text)

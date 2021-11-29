@@ -18,10 +18,6 @@ if __name__ == "__main__":
     docker.index(date=today).update(debug=False)
     time.sleep(1)
 
-    ''' UPDATE ETF DEPOSIT '''
-    docker.deposit(date=today).update()
-    time.sleep(1)
-
     ''' GEN MARKET-DATA '''
     market = docker.interface(date=today)
     market.update_percentage()

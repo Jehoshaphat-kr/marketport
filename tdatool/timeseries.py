@@ -108,8 +108,8 @@ class technical:
         for col in cols:
             is_macd = True if col.startswith('MACD') else False
             data = []
-            tr = df['MACD' if is_macd else col].values
-            sr = df['MACD-Sig' if is_macd else f'd{col}'].values
+            tr = df['MACD' if is_macd else col].values[1:]
+            sr = df['MACD-Sig' if is_macd else f'd{col}'].values[1:]
             for n, date in enumerate(df.index[1:]):
                 if (is_macd and tr[n - 1] < sr[n - 1] and tr[n] > sr[n]) or (not is_macd and sr[n - 1] < 0 < sr[n]):
                     data.append([date, tr[n], 'Buy', 'triangle-up', 'red'])
@@ -191,6 +191,16 @@ class technical:
         self._h_sup_res_= pd.DataFrame(data=data, columns=['ID', '가격', '날짜', '종류']).set_index(keys='날짜')
         return self._h_sup_res_
 
+    @property
+    def bollinger(self) -> pd.DataFrame:
+        """
+        볼린저(Bollinger) 밴드
+        :return:
+        """
+        basis_prc = self.filters['SMA20D']
+        basis_std = self.price['종가'].rolling(window=20).std()
+        objs = {'상한선':basis_prc + (2 * basis_std), '하한선':basis_prc - (2 * basis_std)}
+        return pd.concat(objs=objs, axis=1).dropna()
 
 
 if __name__ == "__main__":
@@ -202,3 +212,4 @@ if __name__ == "__main__":
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
+    print(api.bollinger)
