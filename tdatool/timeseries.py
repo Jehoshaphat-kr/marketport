@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import tdatool as tt
@@ -8,9 +9,10 @@ from scipy.signal import butter, kaiserord, firwin, filtfilt, lfilter
 
 
 today = datetime.today()
+__root__ = os.path.dirname(os.path.dirname(__file__))
 class technical:
 
-    def __init__(self, ticker: str = '005930', period: int = 5):
+    def __init__(self, ticker: str = '005930', src: str='git', period: int = 5):
 
         # Parameter
         self.ticker = ticker
@@ -18,7 +20,11 @@ class technical:
         self.period = period
 
         # Fetch Price
-        self.price = self.__fetch__()
+        self.price = {
+            'krx': self.__fetch1__(),
+            'git': self.__fetch2__(),
+            'local': self.__fetch3__()
+        }[src]
 
         # Default Properties :: Calculate Filter, Trend Line, MACD
         self.filters = self.__filtering__()
@@ -30,7 +36,7 @@ class technical:
         self._h_sup_res_ = pd.DataFrame()
         return
 
-    def __fetch__(self) -> pd.DataFrame:
+    def __fetch1__(self) -> pd.DataFrame:
         """
         시가, 저가, 고가, 종가, 거래량 가격 데이터프레임
         :return:
@@ -38,6 +44,32 @@ class technical:
         from_date = (today - timedelta((365 * self.period) + 180)).strftime("%Y%m%d")
         to_date = today.strftime("%Y%m%d")
         return stock.get_market_ohlcv_by_date(fromdate=from_date, todate=to_date, ticker=self.ticker)
+
+    def __fetch2__(self) -> pd.DataFrame:
+        """
+        시가, 저가, 고가, 종가, 거래량 가격 데이터프레임
+        :return:
+        """
+        df = pd.read_csv(
+            f'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/series/{self.ticker}.csv',
+            encoding='utf-8',
+            index_col='날짜'
+        )
+        df.index = pd.to_datetime(df.index)
+        return df[df.index >= (today - timedelta((365 * self.period) + 180))]
+
+    def __fetch3__(self) -> pd.DataFrame:
+        """
+        시가, 저가, 고가, 종가, 거래량 가격 데이터프레임
+        :return:
+        """
+        df = pd.read_csv(
+            os.path.join(__root__, f'warehouse/series/{self.ticker}.csv'),
+            encoding='utf-8',
+            index_col='날짜'
+        )
+        df.index = pd.to_datetime(df.index)
+        return df[df.index >= (today - timedelta((365 * self.period) + 180))]
 
     def __filtering__(self) -> pd.DataFrame:
         """
@@ -204,7 +236,7 @@ class technical:
 
 
 if __name__ == "__main__":
-    api = technical(ticker='005930')
+    api = technical(ticker='005930', src='local')
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)

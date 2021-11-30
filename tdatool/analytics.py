@@ -1,3 +1,4 @@
+import os
 import plotly.graph_objects as go
 import plotly.offline as of
 import pandas as pd
@@ -16,20 +17,27 @@ colors = [
     '#e377c2',  # raspberry yogurt pink
     '#7f7f7f',  # middle gray
     '#bcbd22',  # curry yellow-green
-    '#17becf'   # blue-teal
+    '#17becf'  # blue-teal
 ]
+
+root = os.path.join(
+    os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'),
+    f'tdat/{datetime.today().strftime("%Y-%m-%d")}'
+)
+if not os.path.isdir(root):
+    os.makedirs(name=root)
+
+def reform(span):
+    """
+    날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
+    :param span: 날짜 리스트
+    :return:
+    """
+    return [f'{d.year}/{d.month}/{d.day}' for d in span]
+
+
 class Technical(technical):
-
-    @staticmethod
-    def reform(span):
-        """
-        날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
-        :param span: 날짜 리스트
-        :return:
-        """
-        return [f'{d.year}/{d.month}/{d.day}' for d in span]
-
-    def layout_basic(self, title:str='', x_title:str='날짜', y_title:str=''):
+    def layout_basic(self, title: str = '', x_title: str = '날짜', y_title: str = ''):
         """
         기본 차트 레이아웃
         :param title: 차트 제목
@@ -74,7 +82,7 @@ class Technical(technical):
             xaxis_rangeslider=dict(visible=False)
         )
 
-    def s_price(self, show:bool=False, save:bool=False) -> go.Figure:
+    def show_price(self, show: bool = False, save: bool = False) -> go.Figure:
         """
         주가 기본 분석 차트
         :param show:
@@ -103,7 +111,7 @@ class Technical(technical):
             x=price.index,
             y=price['종가'],
             name='종가',
-            meta=self.reform(span=price.index),
+            meta=reform(span=price.index),
             line=dict(color='grey'),
             hovertemplate='종가: %{y:,}원<br>날짜: %{meta}<extra></extra>',
             visible='legendonly',
@@ -152,7 +160,7 @@ class Technical(technical):
                 legendgroup='볼린저밴드',
                 showlegend=False if n else True,
                 visible='legendonly',
-                meta=self.reform(span=band.index),
+                meta=reform(span=band.index),
                 hovertemplate=name + '<br>날짜: %{meta}<br>값: %{y:,}원<extra></extra>',
             ))
 
@@ -167,7 +175,7 @@ class Technical(technical):
                 name=col,
                 legendgroup=col,
                 visible='legendonly',
-                meta=self.reform(span=guide.index),
+                meta=reform(span=guide.index),
                 hovertemplate=col + '<br>값: %{y:.2f}<br>날짜: %{meta}<extra></extra>',
             ))
 
@@ -176,10 +184,10 @@ class Technical(technical):
         fig.add_trace(go.Bar(
             x=volume.index,
             y=volume.values,
-            customdata=self.reform(span=self.price.index),
+            customdata=reform(span=self.price.index),
             name='거래량',
             marker=dict(
-                color=['blue' if self.price.loc[d, '시가'] > self.price.loc[d, '종가'] else 'red' for d in volume.index]
+                color=['blue' if d < 0 else 'red' for d in volume.pct_change().fillna(1)]
             ),
             showlegend=False,
             hovertemplate='날짜:%{customdata}<br>거래량:%{y:,}<extra></extra>'
@@ -195,10 +203,10 @@ class Technical(technical):
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename="chart-basic.html", auto_open=False)
+            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-기본차트.html"), auto_open=False)
         return fig
 
-    def s_trend(self, show:bool=False, save:bool=False):
+    def show_trend(self, show: bool = False, save: bool = False):
         """
         추세선 및 MACD
         :param show:
@@ -215,7 +223,7 @@ class Technical(technical):
         fig.add_trace(go.Scatter(
             x=price.index,
             y=price,
-            meta=self.reform(span=price.index),
+            meta=reform(span=price.index),
             name='종가',
             hovertemplate='날짜: %{meta}<br>종가: %{y:,}원<extra></extra>'
         ), row=1, col=1, secondary_y=False)
@@ -229,7 +237,7 @@ class Technical(technical):
             fig.add_trace(go.Scatter(
                 x=trend.index,
                 y=trend[col],
-                customdata=self.reform(span=trend.index),
+                customdata=reform(span=trend.index),
                 legendgroup=col,
                 name=col,
                 mode='lines',
@@ -244,7 +252,7 @@ class Technical(technical):
                 y=pick['value'],
                 mode='markers',
                 text=pick['bs'],
-                meta=self.reform(pick.index),
+                meta=reform(pick.index),
                 legendgroup=col,
                 showlegend=False,
                 marker=dict(
@@ -257,7 +265,7 @@ class Technical(technical):
 
         # MACD
         data = self.macd
-        form = self.reform(span=data.index)
+        form = reform(span=data.index)
         for n, col in enumerate(['MACD', 'MACD-Sig']):
             fig.add_trace(go.Scatter(
                 x=data.index,
@@ -266,7 +274,7 @@ class Technical(technical):
                 meta=form,
                 legendgroup='macd',
                 showlegend=True if not n else False,
-                hovertemplate=col+'<br>날짜: %{meta}<extra></extra>'
+                hovertemplate=col + '<br>날짜: %{meta}<extra></extra>'
             ), row=2, col=1, secondary_y=False)
 
         fig.add_trace(go.Bar(
@@ -291,7 +299,7 @@ class Technical(technical):
                 color=pick['color'],
             ),
             text=pick['bs'],
-            meta=self.reform(span=pick.index),
+            meta=reform(span=pick.index),
             hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>',
             legendgroup='macd',
             showlegend=False
@@ -309,14 +317,97 @@ class Technical(technical):
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename="chart-tendency.html", auto_open=False)
+            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-추세차트.html"), auto_open=False)
         return fig
+
 
 class Fundamental(fundamental):
     def layout_basic(self):
         return
 
-    def show_sales(self, save:bool=False, show:bool=False) -> go.Figure:
+    def show_summary(self, save: bool = False, show: bool = False) -> go.Figure:
+        """
+        [0, 0] 매출 제품 비중
+        [0, 1] 멀티 팩터
+        [1, 0] 컨센서스
+        [1, 1] 외국인 지분율
+        :param save: 
+        :param show: 
+        :return: 
+        """
+        fig = make_subplots(
+            rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.1,
+            subplot_titles=(" ", "컨센서스", "외국인 보유비중", "차입공매도 비중"),
+            specs=[[{"type": "polar"}, {"type": "xy"}],
+                   [{"type": "xy", "secondary_y": True}, {"type": "xy", 'secondary_y': True}]]
+        )
+        # 멀티 팩터
+        df = self.multi_factor
+        for n, col in enumerate(df.columns):
+            fig.add_trace(go.Scatterpolar(
+                name=col,
+                r=df[col].astype(float),
+                theta=df.index,
+                fill='toself',
+                showlegend=True,
+                visible='legendonly' if n else True,
+                hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
+            ), row=1, col=1)
+
+        # 컨센서스
+        df = self.consensus.copy()
+        for col in ['목표주가', '종가']:
+            fig.add_trace(go.Scatter(
+                name=col,
+                x=df.index,
+                y=df[col].astype(int),
+                meta=reform(df.index),
+                hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,}원<extra></extra>'
+            ), row=1, col=2)
+
+        # 외국인보유비중
+        df = self.foreigner.copy()
+        for col in df.columns:
+            flag_price = col.startswith('종가')
+            form = ': %{y:,}원' if flag_price else ': %{y}%'
+            fig.add_trace(go.Scatter(
+                name=col + '(지분율)' if flag_price else col,
+                x=df.index,
+                y=df[col].astype(int if flag_price else float),
+                meta=reform(df.index),
+                hovertemplate='날짜: %{meta}<br>' + col + form + '<extra></extra>'
+            ), row=2, col=1, secondary_y=False if flag_price else True)
+
+        # 차입공매도비중
+        df = self.short_sell.copy()
+        for col in df.columns:
+            is_price = col.endswith('종가')
+            form = ': %{y:,}원' if is_price else ': %{y}%'
+            fig.add_trace(go.Scatter(
+                x=df.index,
+                y=df[col].astype(int if is_price else float),
+                meta=reform(df.index),
+                hovertemplate='날짜: %{meta}<br>' + col + form + '<extra></extra>'
+            ), row=2, col=2, secondary_y=False if is_price else True)
+            
+        # 레이아웃
+        fig.update_layout(dict(
+            title=f'<b>{self.name}[{self.ticker}]</b> : 기업 평가 및 수급',
+            plot_bgcolor='white'
+        ))
+        fig.update_xaxes(title_text="날짜", showgrid=True, gridcolor='lightgrey')
+        fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=1, col=2)
+        fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=2, col=1, secondary_y=False)
+        fig.update_yaxes(title_text="비중[%]", showgrid=False, row=2, col=1, secondary_y=True)
+        fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=2, col=2, secondary_y=False)
+        fig.update_yaxes(title_text="비중[%]", showgrid=False, row=2, col=2, secondary_y=True)
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-수급평가.html"), auto_open=False)
+        return fig
+
+    def show_sales(self, save: bool = False, show: bool = False) -> go.Figure:
         """
         [0, 0] 연간 시가총액/매출/영업이익/당기순이익
         [0, 1] 분기 시가총액/매출/영업이익/당기순이익
@@ -327,32 +418,30 @@ class Fundamental(fundamental):
         :return:
         """
         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
-                            subplot_titles=("연간 실적", "분기 실적", "SG&A, 매출원가 및 R&D투자", "자산"))
+                            subplot_titles=("매출 비중", "연간 실적", "SG&A, 매출원가 및 R&D투자", "자산"),
+                            specs=[[{"type": "pie"}, {"type": "scatter"}], [{"type": "scatter"}, {"type": "scatter"}]])
+
+        df = self.sales_product.copy()
+        fig.add_trace(go.Pie(
+            name='Product',
+            labels=df.index,
+            values=df,
+            textinfo='label+percent',
+            insidetextorientation='radial',
+            showlegend=False,
+            hoverinfo='label+percent'
+        ), row=1, col=1)
 
         df_a = self.annual_statement
-        df_q = self.quarter_statement
         key = '매출액'
         key = '순영업수익' if '순영업수익' in df_a.columns else key
         key = '보험료수익' if '보험료수익' in df_a.columns else key
-
         for n, col in enumerate(['시가총액', key, '영업이익', '당기순이익']):
             y = df_a[col].fillna(0).astype(int)
             fig.add_trace(go.Bar(
                 x=df_a.index,
                 y=y,
                 name=f'연간{col}',
-                marker=dict(color=colors[n]),
-                legendgroup=col,
-                meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
-                hovertemplate=col + ': %{meta}억원<extra></extra>',
-                opacity=0.9,
-            ), row=1, col=1)
-
-            y = df_q[col].fillna(0).astype(int)
-            fig.add_trace(go.Bar(
-                x=df_q.index,
-                y=y,
-                name=f'분기{col}',
                 marker=dict(color=colors[n]),
                 legendgroup=col,
                 meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
@@ -377,7 +466,8 @@ class Fundamental(fundamental):
             name='자산',
             text=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['자산총계'].astype(int)],
             meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['부채총계'].astype(int)],
-            customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['자본총계'].astype(int)],
+            customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in
+                        df_a['자본총계'].astype(int)],
             hovertemplate='자산: %{text}억원<br>부채: %{meta}억원<br>자본: %{customdata}억원<extra></extra>',
             texttemplate=' ',
             marker=dict(color='green'),
@@ -403,16 +493,16 @@ class Fundamental(fundamental):
         ))
         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=1)
         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=2)
-        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=2, col=1)
+        fig.update_yaxes(title_text="비율[%]", gridcolor='lightgrey', row=2, col=1)
         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=2, col=2)
 
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename="chart-sales.html", auto_open=False)
+            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-실적.html"), auto_open=False)
         return fig
 
-    def show_multiple(self, save:bool=False, show:bool=False) -> go.Figure:
+    def show_multiple(self, save: bool = False, show: bool = False) -> go.Figure:
         """
         [0, 0] 연간 재무비율:: ROE/ROA/영업이익률
         [0, 1] 분기 재무비율:: ROE/ROA/영업이익률
@@ -479,5 +569,5 @@ class Fundamental(fundamental):
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename="chart-multiples.html", auto_open=False)
+            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-배수비율.html"), auto_open=False)
         return fig

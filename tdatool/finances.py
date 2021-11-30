@@ -1,8 +1,9 @@
-import requests, tdatool
+import requests, tdatool, json
 import pandas as pd
 from bs4 import BeautifulSoup as Soup
 from pykrx import stock
 from datetime import datetime, timedelta
+from urllib.request import urlopen
 
 
 today = datetime.today()
@@ -26,6 +27,22 @@ class fundamental:
         self.obj2 = pd.read_html(url2 % ticker, encoding='utf-8')
         self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
 
+        # Fetch Foreigner
+        url = f"http://cdn.fnguide.com/SVO2/json/chart/01_01/chart_A{ticker}_1Y.json"
+        self.__foreigner__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+
+        # Fetch Consensus
+        url = f"http://cdn.fnguide.com/SVO2/json/chart/01_02/chart_A{ticker}.json"
+        self.__consensus__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+
+        # Fetch Multi-Factor
+        url = f"http://cdn.fnguide.com/SVO2/json/chart/05_05/A{ticker}.json"
+        self.__factors__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+
+        # Fetch Shortage
+        url = f"http://cdn.fnguide.com/SVO2/json/chart/11_01/chart_A{ticker}_SELL1Y.json"
+        self.__shorts__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+
         # Fetch Market-Cap
         from_date = (today - timedelta(365 * 7)).strftime("%Y%m%d")
         to_date = today.strftime("%Y%m%d")
@@ -33,6 +50,54 @@ class fundamental:
         self.cap['ID'] = [date.strftime("%Y/%m") for date in self.cap.index]
         self.cap['시가총액'] = (self.cap['시가총액'] / 100000000).astype(int)
         return
+
+    @property
+    def multi_factor(self) -> pd.DataFrame:
+        """
+        멀티 팰터 데이터프레임
+        :return:
+        """
+        header = pd.DataFrame(self.__factors__['CHART_H'])['NAME'].tolist()
+        df = pd.DataFrame(self.__factors__['CHART_D']).rename(
+            columns=dict(zip(['NM', 'VAL1', 'VAL2'], ['팩터'] + header))
+        ).set_index(keys='팩터')
+        return df
+
+    @property
+    def foreigner(self) -> pd.DataFrame:
+        """
+        외국인 보유 비중 데이터프레임
+        :return:
+        """
+        df = pd.DataFrame(self.__foreigner__["CHART"])[['TRD_DT', 'J_PRC', 'FRG_RT']].rename(columns={
+            'TRD_DT': '날짜', 'J_PRC': '종가', 'FRG_RT': '외국인보유비중'
+        }).set_index(keys='날짜')
+        df.index = pd.to_datetime(df.index)
+        return df
+
+    @property
+    def consensus(self) -> pd.DataFrame:
+        """
+        컨센선스 Consensus 데이터프레임
+        :return:
+        """
+        df = pd.DataFrame(self.__consensus__['CHART']).rename(columns={
+            'TRD_DT': '날짜', 'VAL1': '투자의견', 'VAL2': '목표주가', 'VAL3': '종가'
+        }).set_index(keys='날짜')
+        df.index = pd.to_datetime(df.index)
+        return df
+
+    @property
+    def short_sell(self) -> pd.DataFrame:
+        """
+        차입공매도 비중 데이터프레임
+        :return:
+        """
+        df = pd.DataFrame(self.__shorts__['CHART']).rename(columns={
+            'TRD_DT':'날짜', 'VAL':'차입공매도비중', 'ADJ_PRC':'수정 종가'
+        }).set_index(keys='날짜')
+        df.index = pd.to_datetime(df.index)
+        return df
 
     @property
     def annual_statement(self) -> pd.DataFrame:
@@ -51,28 +116,12 @@ class fundamental:
         return self.reform_statement(self.obj1[15] if self.is_separate else self.obj1[12])
 
     @property
-    def consensus(self) -> pd.DataFrame:
-        """
-        컨센선스 Consensus 데이터프레임
-        :return:
-        """
-        return self.reform_consensus(self.obj1[7])
-
-    @property
     def sales_product(self) -> pd.DataFrame:
         """
         주요 매출 상품:: [reform] 리폼 필요
         :return:
         """
-        return self.obj2[2]
-
-    @property
-    def market_share(self) -> pd.DataFrame:
-        """
-        주요 제품 시장 점유율:: [reform] 리폼 필요
-        :return:
-        """
-        return self.obj2[3]
+        return self.reform_product(df=self.obj2[2])
 
     @property
     def sg_a(self) -> pd.DataFrame:
@@ -80,7 +129,10 @@ class fundamental:
         판관비 Sales, General and Administrative (SG & A) 데이터프레임
         :return:
         """
-        return self.reform_sga(self.obj2[4])
+        df = self.obj2[4].copy()
+        df.set_index(keys=['항목'], inplace=True)
+        df.index.name = None
+        return df.T
 
     @property
     def sales_cost(self) -> pd.DataFrame:
@@ -88,7 +140,10 @@ class fundamental:
         매출 원가율 데이터프레임
         :return:
         """
-        return self.reform_sga(self.obj2[5])
+        df = self.obj2[5].copy()
+        df.set_index(keys=['항목'], inplace=True)
+        df.index.name = None
+        return df.T
 
     @property
     def rnd_invest(self) -> pd.DataFrame:
@@ -120,6 +175,20 @@ class fundamental:
         return df_copy
 
     @staticmethod
+    def reform_product(df:pd.DataFrame) -> pd.DataFrame:
+        """
+        매출 상품 비중
+        :param df: 원 데이터프레임
+        :return:
+        """
+        df.set_index(keys='제품명', inplace=True)
+        df = df[df.columns[-1]].dropna()
+        df.drop(index=df[df < 0].index, inplace=True)
+        df[df.index[-1]] += (100 - df.sum())
+        df.name = '비중'
+        return df
+
+    @staticmethod
     def reform_rnd(df:pd.DataFrame) -> pd.DataFrame:
         """
         R&D 투자 데이터프레임
@@ -136,42 +205,18 @@ class fundamental:
             df.drop(index=['관련 데이터가 없습니다.'], inplace=True)
         return df
 
-    @staticmethod
-    def reform_sga(df:pd.DataFrame) -> pd.DataFrame:
-        """
-        SG & A: Sales, General, and Administrative(판관비) 또는 매출원가 데이터프레임
-        :param df: 원 데이터프레임
-        :return:
-        """
-        df.set_index(keys=['항목'], inplace=True)
-        df.index.name = None
-        return df.T
-
-    @staticmethod
-    def reform_consensus(df:pd.DataFrame) -> pd.DataFrame:
-        """
-        투자 컨센서스 데이터프레임
-        :param df: 원 데이터프레임
-        :return:
-        """
-        df['투자의견'] = df['투자의견'].astype(str)
-        df['목표주가'] = df['목표주가'].apply(lambda x: "{:,}원".format(x))
-        df['EPS'] = df['EPS'].apply(lambda x: "{:,}원".format(x))
-        df['PER'] = df['PER'].astype(str)
-        return df
 
 if __name__ == "__main__":
-    # api = fundamental(ticker='000660')
+    api = fundamental(ticker='000660')
     # print(api.annual_statement)
     # print(api.annual_statement['PEG'])
     # print(api.quarter_statement)
+    # print(api.foreigner)
+    print(api.short_sell)
     # print(api.consensus)
+    # print(api.multi_factor)
     # print(api.sales_product)
     # print(api.market_share)
     # print(api.sg_a)
     # print(api.sales_cost)
     # print(api.rnd_invest)
-
-    url = 'http://comp.fnguide.com/SVO2/common/chartListPopup2.asp?oid=div5_img&cid=05_05&gicode=A000660&filter=D&term=Y&etc=0&etc2=0&titleTxt=%EB%A9%80%ED%8B%B0%ED%8C%A9%ED%84%B0%20%EC%8A%A4%ED%83%80%EC%9D%BC%20%EB%B6%84%EC%84%9D&dateTxt=undefined&unitTxt='
-    a = requests.get(url=url)
-    print(a.text)
