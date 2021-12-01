@@ -20,7 +20,10 @@ class fundamental:
         html = requests.get(url1 % ticker).content
         soup = Soup(html, 'lxml')
         texts = soup.find('ul', id='bizSummaryContent').find_all('li')
-        self.business_summary = '\n'.join([text.text.replace('&nbsp;', ' ') for text in texts])
+        text = '\n\n '.join([text.text for text in texts])
+        self.business_summary = ' ' + text[0] + ''.join([
+            '.\n' if text[n] == '.' and not text[n-1].isdigit() else text[n] for n in range(1, len(text)-1)
+        ])
 
         # Fetch CompanyGuide SnapShot
         self.obj1 = pd.read_html(url1 % ticker, encoding='utf-8')
@@ -208,11 +211,12 @@ class fundamental:
 
 if __name__ == "__main__":
     api = fundamental(ticker='000660')
+    print(api.business_summary)
     # print(api.annual_statement)
     # print(api.annual_statement['PEG'])
     # print(api.quarter_statement)
     # print(api.foreigner)
-    print(api.short_sell)
+    # print(api.short_sell)
     # print(api.consensus)
     # print(api.multi_factor)
     # print(api.sales_product)

@@ -325,6 +325,21 @@ class Fundamental(fundamental):
     def layout_basic(self):
         return
 
+    def show_business(self, save: bool=False, show: bool=False):
+        """
+        기업 사업 개요 텍스트 저장 또는 출력
+        :param save:
+        :param show:
+        :return:
+        """
+        if save:
+            with open(os.path.join(root, f"{self.ticker}{self.name}-개요.txt"), 'w', encoding='utf-8') as file:
+                file.write(self.business_summary)
+
+        if show:
+            print(self.business_summary)
+        return
+
     def show_summary(self, save: bool = False, show: bool = False) -> go.Figure:
         """
         [0, 0] 매출 제품 비중
@@ -384,6 +399,7 @@ class Fundamental(fundamental):
             is_price = col.endswith('종가')
             form = ': %{y:,}원' if is_price else ': %{y}%'
             fig.add_trace(go.Scatter(
+                name=col,
                 x=df.index,
                 y=df[col].astype(int if is_price else float),
                 meta=reform(df.index),
