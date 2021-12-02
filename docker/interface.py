@@ -33,21 +33,6 @@ class statistic:
         """
         price = self.frame['종가']
         return [100 * price.pct_change(periods=ago).values[-1] for ago in [1, 5, 21, 63, 126, 252]]
-    
-    @property
-    def volatility(self) -> list:
-        """
-        기간별 변동성
-        :return: 
-        """
-        sampler = self.frame.tail(2).to_numpy().flatten()
-        risk = [100 * np.array([np.log(val / sampler[-1]) for val in sampler[:-1]]).std() * 252 ** 0.5]
-
-        price = self.frame['종가']
-        for ago in [5, 21, 63, 126, 252]:
-            samples = price.tail(ago + 1)
-            risk.append(100 * np.log(samples / samples.shift()).std() * 252 ** 0.5)
-        return risk
 
 
 class market(statistic):
@@ -64,7 +49,6 @@ class market(statistic):
         self.base.index = self.base.index.astype(str).str.zfill(6)
         self.base.drop(columns=['상장일'], inplace=True)
         self.today = date if date else datetime.today()
-        print(f"PROP 날짜: {self.today.strftime('%Y-%m-%d')}")
         return
 
     def update_percentage(self) -> None:
@@ -80,7 +64,6 @@ class market(statistic):
             if self.is_trade_banned(ticker=ticker):
                 continue
             perf.append(self.performance)
-            risk.append(self.volatility)
             index.append(ticker)
 
         df_perf = pd.DataFrame(
@@ -88,12 +71,7 @@ class market(statistic):
             index=index,
             columns=['R1D', 'R1W', 'R1M', 'R3M', 'R6M', 'R1Y'],
         )
-        df_risk = pd.DataFrame(
-            data=risk,
-            index=index,
-            columns=['V1D', 'V1W', 'V1M', 'V3M', 'V6M', 'V1Y']
-        )
-        self.base = pd.concat(objs=[self.base, df_perf, df_risk], axis=1)
+        self.base = pd.concat(objs=[self.base, df_perf], axis=1)
         self.base.index.name = '종목코드'
         return
 
@@ -119,8 +97,10 @@ class market(statistic):
         """
         self.base.reset_index(level=0, inplace=True)
         self.base.to_csv(os.path.join(warehouse, 'market/market.csv'), encoding='utf-8', index=False)
-        self.base.to_csv(os.path.join(warehouse, f'market/{self.today.strftime("%Y%m%d")}market.csv'),
-                         encoding='utf-8', index=False)
+        self.base.to_csv(
+            os.path.join(warehouse, f'market/{self.today.strftime("%Y%m%d")}market.csv'),
+            encoding='utf-8', index=False
+        )
         return
 
 

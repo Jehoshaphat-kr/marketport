@@ -20,8 +20,6 @@ class dock:
         today = self.today if not date else date
         self.toc = today.strftime("%Y%m%d")
         self.ago = (today - timedelta(1)).strftime("%Y%m%d")
-
-        print(f"PROP 날짜: {today.strftime('%Y-%m-%d')}")
         self.meta = pd.read_csv(
             filepath_or_buffer=os.path.join(self.dir_warehouse, 'meta-stock.csv'),
             encoding='utf-8',

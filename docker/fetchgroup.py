@@ -104,7 +104,7 @@ class dock:
             try:
                 json = response.json()
                 data = [
-                    [_['CMP_CD'], _['CMP_KOR'], _['IDX_NM_KOR'][5:], _['SEC_NM_KOR']] for _ in json['list']
+                    [_['CMP_CD'], _['CMP_KOR'], _['SEC_NM_KOR'], _['IDX_NM_KOR'][5:]] for _ in json['list']
                 ]
                 return pd.DataFrame(data=data, columns=['종목코드', '종목명', '산업', '섹터'])
             except ConnectionError as e:
@@ -122,7 +122,6 @@ class dock:
         print("=" * 50)
         print("|" + " " * 10 + f"{kind.upper()} 산업/업종 분류 다운로드" + " " * 10 + "|")
         print("=" * 50)
-        print(f'실행 날짜: {datetime.today().strftime("%Y%m%d")}')
         print(f'기준 날짜: {self.date_src} <-- Source')
         if not kind in ['wics', 'wi26']:
             raise ValueError(f'Argument kind must passed either "wics" or "wi26", but {kind} is passed.')
@@ -142,8 +141,8 @@ class dock:
             time.sleep(0.5)
 
         if kind == 'wi26':
-            group.drop(columns=['섹터'], inplace=True)
-            group.rename(columns={'산업':'섹터'}, inplace=True)
+            group.drop(columns=['산업'], inplace=True)
+            # group.rename(columns={'산업':'섹터'}, inplace=True)
         group.to_csv(os.path.join(self.dir_storage, f'{kind.upper()}.csv'), index=False)
         return
 

@@ -22,7 +22,6 @@ class dock:
         print("=" * 50)
 
         self.today = date if date else self.today
-        print("PROP. 날짜 : {}".format(self.today.strftime("%Y-%m-%d")))
         return
 
     def __trig__(self) -> None:
@@ -40,17 +39,17 @@ class dock:
         :return:
         """
         self.__trig__()
-        self.stock_rename()
-        self.stock_update()
-        self.etf_update()
+        self.rename_stock()
+        self.update_stock()
+        self.update_etf()
+        self.update_index()
 
         data = pd.concat(objs=[self.stocks, self.etfs], axis=0)
         data.to_csv(path_or_buf=os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index=False)
-
-        self.check_update()
+        self.check()
         return
 
-    def stock_rename(self) -> None:
+    def rename_stock(self) -> None:
         """
         KRX 고유 명명법 --> 범용 종목명 변경
         :return:
@@ -76,7 +75,7 @@ class dock:
         self.stocks = pd.concat(objs=[self.stocks, renamed, dividend[['종목명']]], axis=0)
         return
 
-    def stock_update(self) -> None:
+    def update_stock(self) -> None:
         """
         KRX 거래소 기준 주식 전 종목 수집
         :return:
@@ -100,7 +99,7 @@ class dock:
         self.stocks.reset_index(level=0, inplace=True)
         return
 
-    def etf_update(self) -> None:
+    def update_etf(self) -> None:
         """
         네이버 기준 ETF 전 종목 수집
         :return:
@@ -118,12 +117,42 @@ class dock:
         self.etfs['시가총액'] = self.etfs['시가총액'] * 100000000
         return
 
-    def check_update(self) -> None:
+    def update_index(self) -> None:
+        """
+        KRX 지수 종류 데이터프레임
+        :return:
+        """
+        print("Proc 05: KRX 지수 종류 수집 중...")
+        ks_tickers = stock.get_index_ticker_list(market='KOSPI')
+        ks_indices = [stock.get_index_ticker_name(ticker) for ticker in ks_tickers]
+        ks_kind = ['KS'] * len(ks_tickers)
+        ks = pd.DataFrame(data={'종목코드':ks_tickers, '종목명':ks_indices, '거래소':ks_kind})
+
+        kq_tickers = stock.get_index_ticker_list(market='KOSDAQ')
+        kq_indices = [stock.get_index_ticker_name(ticker) for ticker in kq_tickers]
+        kq_kind = ['KQ'] * len(kq_tickers)
+        kq = pd.DataFrame(data={'종목코드': kq_tickers, '종목명': kq_indices, '거래소': kq_kind})
+
+        kx_tickers = stock.get_index_ticker_list(market='KRX')
+        kx_indices = [stock.get_index_ticker_name(ticker) for ticker in kx_tickers]
+        kx_kind = ['KX'] * len(kx_tickers)
+        kx = pd.DataFrame(data={'종목코드': kx_tickers, '종목명': kx_indices, '거래소': kx_kind})
+
+        tm_tickers = stock.get_index_ticker_list(market='테마')
+        tm_indices = [stock.get_index_ticker_name(ticker) for ticker in tm_tickers]
+        tm_kind = ['TM'] * len(tm_tickers)
+        tm = pd.DataFrame(data={'종목코드': tm_tickers, '종목명': tm_indices, '거래소': tm_kind})
+
+        frm = pd.concat(objs=[ks, kq, kx, tm], axis=0)
+        frm.to_csv(os.path.join(self.warehouse, 'meta-index.csv'), index=False, encoding='utf-8')
+        return
+
+    def check(self) -> None:
         """
         메타데이터 이상 여부 확인
         :return:
         """
-        print("Proc 05: 메타데이터 이상 여부 확인...")
+        print("Proc 06: 메타데이터 이상 여부 확인...")
         data = pd.read_csv(os.path.join(self.warehouse, 'meta-stock.csv'), encoding='utf-8', index_col='종목코드')
         data.index = data.index.astype(str).str.zfill(6)
         duplicate = data.index.value_counts()

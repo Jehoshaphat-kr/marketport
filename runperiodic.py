@@ -8,15 +8,11 @@ if __name__ == "__main__":
 
     ''' GEN META-DATA '''
     docker.basis(date=today).update()
-    time.sleep(1)
+    time.sleep(2)
 
     ''' UPDATE PRICE '''
     docker.price(date=today).update(debug=False)
     time.sleep(2)
-
-    ''' UPDATE GROUP '''
-    docker.group().update_group(kind='wics')
-    docker.group().update_group(kind='wi26')
 
     ''' GEN MARKET-DATA '''
     market = docker.interface(date=today)
@@ -24,6 +20,12 @@ if __name__ == "__main__":
     market.update_multiple()
     market.save()
     time.sleep(2)
+
+    ''' UPDATE GROUP '''
+    docker.group().update_group(kind='wics')
+    time.sleep(1)
+    docker.group().update_group(kind='wi26')
+    time.sleep(1)
 
     ''' MARKET MAP '''
     maps = docker.marketmap(date=today)
