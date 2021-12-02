@@ -1,148 +1,153 @@
 from datetime import datetime
-from selenium import webdriver
 import pandas as pd
 import os, time, requests
 
 
 __root__ = os.path.dirname(os.path.dirname(__file__))
-class dock:
-    dir_warehouse = os.path.join(__root__, 'warehouse')
-    dir_storage = os.path.join(__root__, 'warehouse/group')
-    dir_handler = os.path.join(__root__, 'warehouse/group/handler')
+wics = {
+    'G1010': '에너지',
+    'G1510': '소재',
+    'G2010': '자본재',
+    'G2020': '상업서비스와공급품',
+    'G2030': '운송',
+    'G2510': '자동차와부품',
+    'G2520': '내구소비재와의류',
+    'G2530': '호텔,레스토랑,레저 등',
+    'G2550': '소매(유통)',
+    'G2560': '교육서비스',
+    'G3010': '식품과기본식료품소매',
+    'G3020': '식품,음료,담배',
+    'G3030': '가정용품과개인용품',
+    'G3510': '건강관리장비와서비스',
+    'G3520': '제약과생물공학',
+    'G4010': '은행',
+    'G4020': '증권',
+    'G4030': '다각화된금융',
+    'G4040': '보험',
+    'G4050': '부동산',
+    'G4510': '소프트웨어와서비스',
+    'G4520': '기술하드웨어와장비',
+    'G4530': '반도체와반도체장비',
+    'G4535': '전자와 전기제품',
+    'G4540': '디스플레이',
+    'G5010': '전기통신서비스',
+    'G5020': '미디어와엔터테인먼트',
+    'G5510': '유틸리티'
+}
 
-    driver = None
-    meta = pd.read_csv(
-        filepath_or_buffer=os.path.join(dir_warehouse, 'meta-stock.csv'),
-        encoding='utf-8',
-        index_col='종목코드'
-    )
-    wics_meta = pd.read_csv(
-        filepath_or_buffer=os.path.join(dir_handler, 'WICSMETA.csv'),
-        encoding='utf-8',
-        index_col='SectorCode'
-    )
-    wi26_meta = pd.read_csv(
-        filepath_or_buffer=os.path.join(dir_handler, 'WI26META.csv'),
-        encoding='utf-8',
-        index_col='SectorCode'
-    )
-    url = 'http://www.wiseindex.com/Index/Index#/%s.0.Components'
-    wics = pd.DataFrame()
-    wi26 = pd.DataFrame()
+wi26 = {
+    'WI100': '에너지',
+    'WI110': '화학',
+    'WI200': '비철금속',
+    'WI210': '철강',
+    'WI220': '건설',
+    'WI230': '기계',
+    'WI240': '조선',
+    'WI250': '상사,자본재',
+    'WI260': '운송',
+    'WI300': '자동차',
+    'WI310': '화장품,의류',
+    'WI320': '호텔,레저',
+    'WI330': '미디어,교육',
+    'WI340': '소매(유통)',
+    'WI400': '필수소비재',
+    'WI410': '건강관리',
+    'WI500': '은행',
+    'WI510': '증권',
+    'WI520': '보험',
+    'WI600': '소프트웨어',
+    'WI610': 'IT하드웨어',
+    'WI620': '반도체',
+    'WI630': 'IT가전',
+    'WI640': '디스플레이',
+    'WI700': '통신서비스',
+    'WI800': '유틸리티',
+}
+
+class dock:
 
     def __init__(self):
+        self.dir_storage = os.path.join(__root__, 'warehouse/group')
+        self.dir_handler = os.path.join(__root__, 'warehouse/group/handler')
+
+        self.meta = pd.read_csv(
+            filepath_or_buffer=os.path.join(os.path.join(__root__, 'warehouse'), 'meta-stock.csv'),
+            encoding='utf-8',
+            index_col='종목코드'
+        )
+        self.__date__ = ''
         return
 
-    def wise_init(self, wise:str='ALL') -> None:
+    @property
+    def date_src(self) -> str:
         """
-        CHROME 크롤러 초기화
-        :param wise: 분류 방법 선택 실행
+        WICS/WI26 소스 최근 데이터 날짜
+        :return:
+        """
+        if not self.__date__:
+            source = requests.get(url='http://www.wiseindex.com/Index/Index#/G1010.0.Components').text
+            i_ = source.find("기준일")
+            _i = source[i_:].find("</p>")
+            self.__date__ = datetime.strptime(source[i_ + 6: i_ + _i], "%Y.%m.%d").strftime("%Y%m%d")
+        return self.__date__
+
+    def fetch(self, code:str) -> pd.DataFrame:
+        """
+        개별 지수(산업, 섹터) 다운로드
+        :param code:
+        :return:
+        """
+        response = requests.get(
+            url=f'http://www.wiseindex.com/Index/GetIndexComponets?ceil_yn=0&dt={self.date_src}&sec_cd={code}'
+        )
+        if response.status_code == 200:
+            try:
+                json = response.json()
+                data = [
+                    [_['CMP_CD'], _['CMP_KOR'], _['IDX_NM_KOR'][5:], _['SEC_NM_KOR']] for _ in json['list']
+                ]
+                return pd.DataFrame(data=data, columns=['종목코드', '종목명', '산업', '섹터'])
+            except ConnectionError as e:
+                print(f'\t- Parse error while fetching {code}')
+        else:
+            print(f'\t- Connection error while fetching {code}')
+        return pd.DataFrame()
+
+    def update_group(self, kind:str):
+        """
+        지수 그룹 업데이트
+        :param kind: wics/wi26
         :return:
         """
         print("=" * 50)
-        print("|" + " " * 10 + "WISE 산업/업종 분류 다운로드" + " " * 10 + "|")
+        print("|" + " " * 10 + f"{kind.upper()} 산업/업종 분류 다운로드" + " " * 10 + "|")
         print("=" * 50)
-        print("PROP 날짜: {}".format(datetime.today().strftime("%Y-%m-%d")))
-        option = webdriver.ChromeOptions()
-        option.add_argument('--headless')
-        option.add_argument('--no-sandbox')
-        option.add_argument('--disable-dev-shm-usage')
-        option.add_argument('--disable-gpu')
+        print(f'실행 날짜: {datetime.today().strftime("%Y%m%d")}')
+        print(f'기준 날짜: {self.date_src} <-- Source')
+        if not kind in ['wics', 'wi26']:
+            raise ValueError(f'Argument kind must passed either "wics" or "wi26", but {kind} is passed.')
+        meta = wics if kind == 'wics' else wi26
 
-        self.wise = wise
-        self.driver = webdriver.Chrome(executable_path='./chromedriver.exe', options=option)
-        return
+        group = pd.DataFrame()
+        done = list(meta.keys())
+        while done:
+            code = done[0]
+            print(f'{100 * (list(meta.keys()).index(code) + 1) / len(meta):.2f}% :: {code} {meta[code]}')
+            df = self.fetch(code=code)
 
-    def wise_date(self) -> None:
-        """
-        WISE 산업 분류 날짜 확인
-        :return: 
-        """
-        response = requests.get(self.url % self.wics_meta.index[0])
-        source = response.text
-        i_start = source.find("기준일")
-        i_end = source[i_start:].find("</p>")
-        source_date = datetime.strptime(source[i_start + 6: i_start + i_end], "%Y.%m.%d").strftime("%Y-%m-%d")
-        print("PROP 날짜: {} <-- Source".format(source_date))
-        return
-
-    def wise_update(self) -> None:
-        """
-        WISE 산업 분류 업데이트
-        :return:
-        """
-        for i, wise, frm in [('01', 'WICS', self.wics_meta), ('02', 'WI26', self.wi26_meta)]:
-            if not self.wise == 'ALL' and not self.wise == wise:
+            if not df.empty:
+                group = group.append(df, ignore_index=True)
+                done.remove(code)
                 continue
-            print("Proc {}: {} 분류 다운로드".format(i, wise))
-            buff = []
-            for n, code in enumerate(frm.index):
-                name = frm.loc[code, 'Sector']
-                print(f"Proc {i}-{str(n+1).zfill(2)}: {100*(n+1)/len(frm):.2f}% {name}", end=" ")
+            time.sleep(0.5)
 
-                flag = False
-                for retry in range(1, 6):
-                    try:
-                        self.driver.get(url=self.url % code)
-                        self.driver.refresh()
-                        time.sleep(3)
-
-                        fetch = pd.read_html(self.driver.page_source, header=0)[-1]
-                        fetch.drop(columns=['섹터명'], inplace=True)
-                        if wise == "WICS":
-                            fetch['산업'] = frm.loc[code, 'Industry']
-                        fetch['섹터'] = name
-                        buff.append(fetch)
-                        print("SUCCESS")
-                        flag = False
-                        break
-                    except Exception as e:
-                        print('RETRY(%d),' % retry, end=' ')
-                        time.sleep(5)
-                if flag:
-                    print("FAILED ***")
-                time.sleep(2)
-
-            pd.concat(objs=buff, axis=0, ignore_index=True).to_csv(
-                os.path.join(self.dir_storage, wise + '.csv'),
-                encoding='utf-8',
-                index=False
-            )
-        self.driver.close()
+        if kind == 'wi26':
+            group.drop(columns=['섹터'], inplace=True)
+            group.rename(columns={'산업':'섹터'}, inplace=True)
+        group.to_csv(os.path.join(self.dir_storage, f'{kind.upper()}.csv'), index=False)
         return
 
-    def wise_postproc(self) -> None:
-        """
-        WISE 산업 분류 후처리 및 저장
-        :return:
-        """
-        time.sleep(1)
-        print("Proc 03: 산업분류 후처리")
-        meta = self.meta.copy()
-        meta.reset_index(level=0, inplace=True)
-        meta.set_index(keys='종목명', inplace=True)
-        for n, wise in enumerate(['WICS', 'WI26']):
-            if not self.wise == 'ALL' and not self.wise == wise:
-                continue
-            print(f"Proc 03-{str(n+1).zfill(2)}: {wise} 분류 후처리")
-            frm = pd.read_csv(
-                filepath_or_buffer=os.path.join(self.dir_storage, wise + '.csv'),
-                index_col='종목명',
-                encoding='utf-8'
-            )
-            frm = frm.join(meta[['종목코드']], how='left')
-            frm_na = frm[frm['종목코드'].isna()].copy()
-            if not frm_na.empty:
-                print("종목코드 미상 항목 발생")
-                print("RENAME.csv @handler 업데이트 필요")
-                print(frm_na)
-                print('-' * 70)
-                return
-            frm.reset_index(level=0, inplace=True)
-            frm.to_csv(os.path.join(self.dir_storage, wise + '.csv'), index=False)
-        return
-
-    def theme_update(self) -> None:
+    def update_theme(self) -> None:
         """
         테마 파일 CSV 변환
         :return:
@@ -167,11 +172,14 @@ class dock:
         print("-" * 70)
         return
 
-    def etf_check(self) -> None:
+    def check_etf(self) -> None:
         """
         ETF 최신화 여부 확인
         :return: 
         """
+        print("=" * 50)
+        print("|" + " " * 15 + f"ETF 분류 다운로드" + " " * 16 + "|")
+        print("=" * 50)
         etf_online = self.meta[self.meta['거래소'] == 'ETF'].copy()
         etf_offline = pd.read_excel(os.path.join(self.dir_handler, 'TDATETF.xlsx'), index_col='종목코드')
 
@@ -180,40 +188,22 @@ class dock:
 
         ''' NOTICE '''
         for kind, frm in [('삭제', to_be_delete), ('추가', to_be_update)]:
-            print("** ETF 분류 {} 필요 항목 **".format(kind))
-            if frm.empty:
-                print("--> 없음")
-            else:
+            print(f"▷ ETF 분류 {kind} 필요 항목: {'없음' if frm.empty else '있음'}")
+            if not frm.empty:
                 print(frm)
                 if kind == '추가':
                     os.startfile(self.dir_handler)
-            print("-" * 70)
+            print("-" * 50)
         return
 
-    def etf_update(self) -> None:
+    def update_etf(self) -> None:
         """
         ETF 수기 파일 CSV 변환
         :return:
         """
-        print("** ETF 분류 업데이트 **")
         etf_offline = pd.read_excel(os.path.join(self.dir_handler, 'TDATETF.xlsx'))
         etf_offline.to_csv(os.path.join(self.dir_storage, 'ETF.csv'), index=False, encoding='utf-8')
-        print("-" * 70)
         return
-
-
-'''
-Partial Code:: @dock.wise_update()
-WISE 산업 분류 크롤링 시, pandas.read_html 사용 불가 상태 일 때 아래 코드 추가 필요
------------------------------------------- < 아래 > ------------------------------------------ 
-    # if fetch.empty:
-    #     xpath = '//*[@id="ng-app"]/div/div/div[2]/div[2]/div[3]/div[2]/div/div/table/tbody/tr'
-    #     cps = self.driver.find_elements_by_xpath(xpath)
-    #     raw_names = [cp.text for cp in cps]
-    #     sector_name = [code['Sector']] * len(cps)
-    #     fetch = pd.DataFrame(data={"종목명": raw_names, "섹터": sector_name})
-----------------------------------------------------------------------------------------------
-'''
 
 
 if __name__ == "__main__":
@@ -221,14 +211,12 @@ if __name__ == "__main__":
     docker = dock()
 
     ''' WICS/WI26 '''
-    docker.wise_init(wise='WICS')
-    docker.wise_date()
-    docker.wise_update()
-    docker.wise_postproc()
+    docker.update_group(kind='wi26')
+    docker.update_group(kind='wics')
 
     ''' ETF '''
-    # docker.etf_check()
-    # docker.etf_update()
+    docker.check_etf()
+    docker.update_etf()
 
     ''' THEME '''
-    # docker.theme_update()
+    # docker.update_theme()

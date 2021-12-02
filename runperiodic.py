@@ -14,9 +14,9 @@ if __name__ == "__main__":
     docker.price(date=today).update(debug=False)
     time.sleep(2)
 
-    ''' FETCH INDEX '''
-    docker.index(date=today).update(debug=False)
-    time.sleep(1)
+    ''' UPDATE GROUP '''
+    docker.group().update_group(kind='wics')
+    docker.group().update_group(kind='wi26')
 
     ''' GEN MARKET-DATA '''
     market = docker.interface(date=today)
