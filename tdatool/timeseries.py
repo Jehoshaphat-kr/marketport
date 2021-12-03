@@ -33,7 +33,9 @@ class technical:
 
         # Empty Property
         self._bend_point_ = pd.DataFrame()
-        self._h_sup_res_ = pd.DataFrame()
+        self._thres_ = pd.DataFrame()
+        self._pivot_ = pd.DataFrame()
+        self._trend_ = pd.DataFrame()
         return
 
     def __fetch1__(self) -> pd.DataFrame:
@@ -187,41 +189,39 @@ class technical:
         return pd.concat(objs=objs, axis=1)
 
     @property
-    def h_sup_res(self) -> pd.DataFrame:
+    def thres(self) -> pd.DataFrame:
         """
         수평 지지선/저항선 데이터프레임
         :return:
         """
-        if not self._h_sup_res_.empty:
-            return self._h_sup_res_
+        if self._thres_.empty:
+            frm = self.price[self.price.index >= (self.price.index[-1] - timedelta(180))].copy()
+            low = frm['저가']
+            high = frm['고가']
+            spread = (high - low).mean()
 
-        frm = self.price[self.price.index >= (self.price.index[-1] - timedelta(180))].copy()
-        low = frm['저가']
-        high = frm['고가']
-        spread = (high - low).mean()
+            def is_support(i):
+                return low[i] < low[i - 1] < low[i - 2] and low[i] < low[i + 1] < low[i + 2]
 
-        def is_support(i):
-            return low[i] < low[i - 1] < low[i - 2] and low[i] < low[i + 1] < low[i + 2]
+            def is_resistance(i):
+                return high[i] > high[i - 1] > high[i - 2] and high[i] > high[i + 1] > high[i + 2]
 
-        def is_resistance(i):
-            return high[i] > high[i - 1] > high[i - 2] and high[i] > high[i + 1] > high[i + 2]
+            def is_far_from_level(l, lines):
+                return np.sum([abs(l - x) < spread for x in lines]) == 0
 
-        def is_far_from_level(l, lines):
-            return np.sum([abs(l - x) < spread for x in lines]) == 0
-
-        levels = []
-        data = []
-        for n, date in enumerate(frm.index[2: len(frm) - 2]):
-            if is_support(n) and is_far_from_level(l=low[n], lines=levels):
-                sample = (n, low[n])
-                levels.append(sample)
-                data.append(list(sample) + list((date, f'지지선@{date.strftime("%Y%m%d")[2:]}')))
-            elif is_resistance(n) and is_far_from_level(l=frm['고가'][n], lines=levels):
-                sample = (n, high[n])
-                levels.append(sample)
-                data.append(list(sample) + list((date, f'저항선@{date.strftime("%Y%m%d")[2:]}')))
-        self._h_sup_res_= pd.DataFrame(data=data, columns=['ID', '가격', '날짜', '종류']).set_index(keys='날짜')
-        return self._h_sup_res_
+            levels = []
+            data = []
+            for n, date in enumerate(frm.index[2: len(frm) - 2]):
+                if is_support(n) and is_far_from_level(l=low[n], lines=levels):
+                    sample = (n, low[n])
+                    levels.append(sample)
+                    data.append(list(sample) + list((date, f'지지선@{date.strftime("%Y%m%d")[2:]}')))
+                elif is_resistance(n) and is_far_from_level(l=frm['고가'][n], lines=levels):
+                    sample = (n, high[n])
+                    levels.append(sample)
+                    data.append(list(sample) + list((date, f'저항선@{date.strftime("%Y%m%d")[2:]}')))
+            self._thres_= pd.DataFrame(data=data, columns=['ID', '가격', '날짜', '종류']).set_index(keys='날짜')
+        return self._thres_
 
     @property
     def bollinger(self) -> pd.DataFrame:
@@ -231,7 +231,7 @@ class technical:
         """
         basis_prc = self.filters['SMA20D']
         basis_std = self.price['종가'].rolling(window=20).std()
-        objs = {'상한선':basis_prc + (2 * basis_std), '하한선':basis_prc - (2 * basis_std)}
+        objs = {'상한선':basis_prc + (2 * basis_std), '하한선':basis_prc - (2 * basis_std) , '기준선': basis_prc}
         return pd.concat(objs=objs, axis=1).dropna()
 
     @property
@@ -240,32 +240,51 @@ class technical:
         피벗(Pivot) 지점
         :return:
         """
-        price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
-        low = price['저가']
-        high = price['고가']
-        close = price['종가']
+        if self._pivot_.empty:
+            price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
+            low = price['저가']
+            high = price['고가']
+            close = price['종가']
 
-        minima, maxima = tt.get_extrema(h=(low, high), accuracy=8)
-        data = []
-        for n, date in enumerate(price.index):
-            if n in minima and n in maxima:
-                data.append([date, low[n], high[n]])
-            elif n in minima:
-                data.append([date, low[n], np.nan])
-            elif n in maxima:
-                data.append([date, np.nan, high[n]])
-        df_1 = pd.DataFrame(data=data, columns=['날짜', 'PV저가', 'PV고가']).set_index(keys='날짜')
-        
-        minima, maxima = tt.get_extrema(h=close, accuracy=8)
-        data = []
-        for n, date in enumerate(close.index):
-            if n in minima:
-                data.append([date, close[n], np.nan])
-            if n in maxima:
-                data.append([date, np.nan, close[n]])
-        df_2 = pd.DataFrame(data=data, columns=['날짜', 'PV종가(저)', 'PV종가(고)']).set_index(keys='날짜')
-        return df_1.join(df_2, how='left')
+            minima, maxima = tt.get_extrema(h=(low, high), accuracy=8)
+            data = []
+            for n, date in enumerate(price.index):
+                if n in minima and n in maxima:
+                    data.append([date, low[n], high[n]])
+                elif n in minima:
+                    data.append([date, low[n], np.nan])
+                elif n in maxima:
+                    data.append([date, np.nan, high[n]])
+            df_1 = pd.DataFrame(data=data, columns=['날짜', 'PV저가', 'PV고가']).set_index(keys='날짜')
 
+            minima, maxima = tt.get_extrema(h=close, accuracy=8)
+            data = []
+            for n, date in enumerate(close.index):
+                if n in minima:
+                    data.append([date, close[n], np.nan])
+                if n in maxima:
+                    data.append([date, np.nan, close[n]])
+            df_2 = pd.DataFrame(data=data, columns=['날짜', 'PV종가(저)', 'PV종가(고)']).set_index(keys='날짜')
+            self._pivot_ = df_1.join(df_2, how='left')
+        return self._pivot_
+
+    @property
+    def trend(self) -> pd.DataFrame:
+        """
+        추세선
+        :return:
+        """
+        if self._trend_.empty:
+            price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
+            # minimaIdxs, pmin, mintrend, minwindows = tt.calc_support_resistance((price['저가'], price['고가']))
+            upper, lower = tt.calc_support_resistance(h=price['종가'])
+            for n, u in enumerate(upper):
+                print(u)
+                if n >= 2:
+                    for _ in u:
+                        print('\t', _)
+
+        return self._trend_
 if __name__ == "__main__":
     api = technical(ticker='005930', src='local')
     # print(api.price)
@@ -276,4 +295,5 @@ if __name__ == "__main__":
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
     # print(api.bollinger)
-    print(api.pivot)
+    # print(api.pivot)
+    print(api.trend)

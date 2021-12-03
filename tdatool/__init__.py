@@ -156,7 +156,7 @@ def get_extrema(h, extmethod=METHOD_NUMDIFF, accuracy=8):
 ''' 추세선 Trend Line 계산: Default '''
 def calc_support_resistance(h, extmethod=METHOD_NUMDIFF, method=METHOD_NSQUREDLOGN,
                             window=125, errpct=0.005, hough_scale=0.01, hough_prob_iter=10,
-                            sortError=False, accuracy=1):
+                            sortError=False, accuracy=8):
     if not type(window) is int:
         raise ValueError('window must be of type int')
     if not type(errpct) is float:
