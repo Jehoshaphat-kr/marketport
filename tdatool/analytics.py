@@ -118,6 +118,20 @@ class Technical(technical):
             legendgroup='가격'
         ))
 
+        # 피벗 포인트
+        pivot = self.pivot.copy()
+        for col in pivot.columns:
+            df = pivot[col].dropna()
+            fig.add_trace(go.Scatter(
+                name=col,
+                x=df.index,
+                y=df.astype(int),
+                mode='markers',
+                marker=dict(symbol='circle', color='lightgreen' if '고' in col else 'magenta'),
+                visible='legendonly',
+                hoverinfo='skip'
+            ))
+
         # 추세선
         data = self.bound.copy()
         for col in data.columns:

@@ -234,6 +234,37 @@ class technical:
         objs = {'상한선':basis_prc + (2 * basis_std), '하한선':basis_prc - (2 * basis_std)}
         return pd.concat(objs=objs, axis=1).dropna()
 
+    @property
+    def pivot(self) -> pd.DataFrame:
+        """
+        피벗(Pivot) 지점
+        :return:
+        """
+        price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
+        low = price['저가']
+        high = price['고가']
+        close = price['종가']
+
+        minima, maxima = tt.get_extrema(h=(low, high), accuracy=8)
+        data = []
+        for n, date in enumerate(price.index):
+            if n in minima and n in maxima:
+                data.append([date, low[n], high[n]])
+            elif n in minima:
+                data.append([date, low[n], np.nan])
+            elif n in maxima:
+                data.append([date, np.nan, high[n]])
+        df_1 = pd.DataFrame(data=data, columns=['날짜', 'PV저가', 'PV고가']).set_index(keys='날짜')
+        
+        minima, maxima = tt.get_extrema(h=close, accuracy=8)
+        data = []
+        for n, date in enumerate(close.index):
+            if n in minima:
+                data.append([date, close[n], np.nan])
+            if n in maxima:
+                data.append([date, np.nan, close[n]])
+        df_2 = pd.DataFrame(data=data, columns=['날짜', 'PV종가(저)', 'PV종가(고)']).set_index(keys='날짜')
+        return df_1.join(df_2, how='left')
 
 if __name__ == "__main__":
     api = technical(ticker='005930', src='local')
@@ -244,4 +275,5 @@ if __name__ == "__main__":
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
-    print(api.bollinger)
+    # print(api.bollinger)
+    print(api.pivot)
