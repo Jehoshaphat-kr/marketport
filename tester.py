@@ -1,7 +1,7 @@
 import tdatool as tt
 
 if __name__ == "__main__":
-    ticker = '025900'
+    ticker = '006400'
 
     # fundamental = tt.Fundamental(ticker=ticker)
     # print(f'{fundamental.name}({fundamental.ticker}) 기본적 분석')

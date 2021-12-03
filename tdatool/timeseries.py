@@ -235,40 +235,6 @@ class technical:
         return pd.concat(objs=objs, axis=1).dropna()
 
     @property
-    def pivot(self) -> pd.DataFrame:
-        """
-        피벗(Pivot) 지점
-        :return:
-        """
-        if self._pivot_.empty:
-            price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
-            low = price['저가']
-            high = price['고가']
-            close = price['종가']
-
-            minima, maxima = tt.get_extrema(h=(low, high), accuracy=8)
-            data = []
-            for n, date in enumerate(price.index):
-                if n in minima and n in maxima:
-                    data.append([date, low[n], high[n]])
-                elif n in minima:
-                    data.append([date, low[n], np.nan])
-                elif n in maxima:
-                    data.append([date, np.nan, high[n]])
-            df_1 = pd.DataFrame(data=data, columns=['날짜', 'PV저가', 'PV고가']).set_index(keys='날짜')
-
-            minima, maxima = tt.get_extrema(h=close, accuracy=8)
-            data = []
-            for n, date in enumerate(close.index):
-                if n in minima:
-                    data.append([date, close[n], np.nan])
-                if n in maxima:
-                    data.append([date, np.nan, close[n]])
-            df_2 = pd.DataFrame(data=data, columns=['날짜', 'PV종가(저)', 'PV종가(고)']).set_index(keys='날짜')
-            self._pivot_ = df_1.join(df_2, how='left')
-        return self._pivot_
-
-    @property
     def trend(self) -> pd.DataFrame:
         """
         추세선
@@ -276,15 +242,54 @@ class technical:
         """
         if self._trend_.empty:
             price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
-            # minimaIdxs, pmin, mintrend, minwindows = tt.calc_support_resistance((price['저가'], price['고가']))
-            upper, lower = tt.calc_support_resistance(h=price['종가'])
-            for n, u in enumerate(upper):
-                print(u)
-                if n >= 2:
-                    for _ in u:
-                        print('\t', _)
+            span = price.index
 
+            lower, upper = tt.calc_support_resistance(h=price['고가'])
+            upper_pivot, upper_range, upper_trend, upper_window = upper
+
+            lower, upper = tt.calc_support_resistance(h=price['저가'])
+            lower_pivot, lower_range, lower_trend, lower_window = lower
+
+            # Pivot Points
+            data = []
+            for n, date in enumerate(span):
+                if n in upper_pivot and n in lower_pivot:
+                    data.append([date, price['저가'][n], price['고가'][n]])
+                elif n in lower_pivot:
+                    data.append([date, price['저가'][n], np.nan])
+                elif n in upper_pivot:
+                    data.append([date, np.nan, price['고가'][n]])
+            pivot = pd.DataFrame(data=data, columns=['날짜', 'PV-지지', 'PV-저항']).set_index(keys='날짜')
+
+            # Average Trend
+            cols = ['날짜', 'Avg-지지선', 'Avg-저항선']
+            data = [[price.index[0], lower_range[1], upper_range[1]],
+                    [price.index[-1], lower_range[0] * (len(price)-1) + lower_range[1], upper_range[0] * (len(price)-1) + upper_range[1]]]
+            trend_avg = pd.DataFrame(data=data, columns=cols).set_index(keys='날짜')
+
+            # Trend
+            min_h, max_h = min(min(price['저가']), min(price['고가'])), max(max(price['저가']), max(price['고가']))
+            data = []
+            for label, line in [('저항선', upper_trend), ('지지선', lower_trend)]:
+                h = price['저가' if label == '지지선' else '고가']
+                for n, t in enumerate(line[:3]):
+                    point, factor = t
+                    maxx = point[-1] + 1
+                    while maxx < len(price) - 1:
+                        ypred = factor[0] * maxx + factor[1]
+                        if (h[maxx - 1] < ypred < h[maxx] or h[maxx] < ypred < h[maxx - 1] or
+                            ypred > max_h + (max_h - min_h) * 0.1 or ypred < min_h - (max_h - min_h) * 0.1): break
+                        maxx += 1
+                    x_vals = np.array((point[0], maxx))
+                    y_vals = factor[0] * x_vals + factor[1]
+                    x_date = [span[n] for n in x_vals]
+                    data.append(pd.Series(data=y_vals, index=x_date, name=f'{label}{n + 1}'))
+            trend_line = pd.concat(objs=data, axis=1)
+
+            self._trend_ = pd.concat([pivot, trend_avg, trend_line], axis=1)
         return self._trend_
+
+
 if __name__ == "__main__":
     api = technical(ticker='005930', src='local')
     # print(api.price)

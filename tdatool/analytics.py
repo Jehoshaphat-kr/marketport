@@ -103,51 +103,69 @@ class Technical(technical):
             decreasing_line=dict(color='royalblue'),
             name='일봉',
             showlegend=True,
-            legendgroup='일봉'
         ))
 
-        # 가격차트::종가
-        fig.add_trace(go.Scatter(
-            x=price.index,
-            y=price['종가'],
-            name='종가',
-            meta=reform(span=price.index),
-            line=dict(color='grey'),
-            hovertemplate='종가: %{y:,}원<br>날짜: %{meta}<extra></extra>',
-            visible='legendonly',
-            legendgroup='가격'
-        ))
+        # 가격차트::단일 주가
+        for col in price.columns:
+            fig.add_trace(go.Scatter(
+                name=col,
+                x=price.index,
+                y=price[col],
+                meta=reform(span=price.index),
+                line=dict(color='grey'),
+                hovertemplate=col + ': %{y:,}원<br>날짜: %{meta}<extra></extra>',
+                visible='legendonly',
+            ))
 
         # 피벗 포인트
-        pivot = self.pivot.copy()
-        for col in pivot.columns:
-            df = pivot[col].dropna()
+        trend = self.trend.copy()
+        for col in [col for col in trend.columns if col.startswith('PV')]:
+            df = trend[col].dropna()
             fig.add_trace(go.Scatter(
                 name=col,
                 x=df.index,
                 y=df.astype(int),
                 mode='markers',
-                marker=dict(symbol='circle', color='lightgreen' if '고' in col else 'magenta'),
+                marker=dict(symbol='circle', color='royalblue' if '저항' in col else 'red'),
                 visible='legendonly',
                 hoverinfo='skip'
             ))
 
         # 추세선
-        data = self.bound.copy()
-        for col in data.columns:
-            gap = [l for l in ['1Y', 'YTD', '6M', '3M'] if col.startswith(l)][0]
+        for col in [col for col in trend.columns if col.startswith('Avg')]:
+            df = trend[col].dropna()
             fig.add_trace(go.Scatter(
-                x=data.index,
-                y=data[col],
-                legendgroup=f'{gap}추세선',
-                name=f'{gap}추세선',
+                name=col,
+                x=df.index,
+                y=df,
+                mode='lines',
+                line=dict(
+                    color='royalblue' if col.endswith('저항선') else 'red',
+                    dash='dash'
+                ),
+                hovertemplate=col,
+                visible='legendonly'
+            ))
+
+        for col in [col for col in trend.columns if col[-1].isdigit()]:
+            df = trend[col].dropna()
+            fig.add_trace(go.Scatter(
+                legendgroup=f'추세선{col[-1]}',
+                name=f'추세선{col[-1]}',
+                x=df.index,
+                y=df,
+                mode='lines',
+                line=dict(
+                    color='royalblue' if '저항' in col else 'red',
+                    dash='dot'
+                ),
+                hovertemplate=col,
                 visible='legendonly',
-                showlegend=True if col.endswith('UP') else False,
-                hovertemplate=col + '<extra></extra>'
+                showlegend=False if '저항' in col else True
             ))
 
         # 지지/저항선
-        support_resist = self.h_sup_res.copy()
+        support_resist = self.thres.copy()
         for n, date in enumerate(support_resist.index):
             name = support_resist.loc[date, '종류']
             fig.add_trace(go.Scatter(
@@ -181,7 +199,7 @@ class Technical(technical):
         # 필터선
         guide = self.filters.copy()
         for col in guide.columns:
-            if col.startswith('FIR') or col.startswith('EMA'):
+            if col.startswith('FIR') or col.startswith('EMA') or col.startswith('IIR'):
                 continue
             fig.add_trace(go.Scatter(
                 x=guide.index,
