@@ -30,21 +30,11 @@ class fundamental:
         self.obj2 = pd.read_html(url2 % ticker, encoding='utf-8')
         self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
 
-        # Fetch Foreigner
-        url = f"http://cdn.fnguide.com/SVO2/json/chart/01_01/chart_A{ticker}_1Y.json"
-        self.__foreigner__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
-
-        # Fetch Consensus
-        url = f"http://cdn.fnguide.com/SVO2/json/chart/01_02/chart_A{ticker}.json"
-        self.__consensus__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
-
-        # Fetch Multi-Factor
-        url = f"http://cdn.fnguide.com/SVO2/json/chart/05_05/A{ticker}.json"
-        self.__factors__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
-
-        # Fetch Shortage
-        url = f"http://cdn.fnguide.com/SVO2/json/chart/11_01/chart_A{ticker}_SELL1Y.json"
-        self.__shorts__ = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+        # Initialize DataFrames
+        self._foreigner_ = pd.DataFrame()
+        self._consensus_ = pd.DataFrame()
+        self._factors_ = pd.DataFrame()
+        self._shorts_ = pd.DataFrame()
 
         # Fetch Market-Cap
         from_date = (today - timedelta(365 * 7)).strftime("%Y%m%d")
@@ -60,11 +50,14 @@ class fundamental:
         멀티 팰터 데이터프레임
         :return:
         """
-        header = pd.DataFrame(self.__factors__['CHART_H'])['NAME'].tolist()
-        df = pd.DataFrame(self.__factors__['CHART_D']).rename(
-            columns=dict(zip(['NM', 'VAL1', 'VAL2'], ['팩터'] + header))
-        ).set_index(keys='팩터')
-        return df
+        if self._factors_.empty:
+            url = f"http://cdn.fnguide.com/SVO2/json/chart/05_05/A{self.ticker}.json"
+            data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+            header = pd.DataFrame(data['CHART_H'])['NAME'].tolist()
+            self._factors_ = pd.DataFrame(data['CHART_D']).rename(
+                columns=dict(zip(['NM', 'VAL1', 'VAL2'], ['팩터'] + header))
+            ).set_index(keys='팩터')
+        return self._factors_
 
     @property
     def foreigner(self) -> pd.DataFrame:
@@ -72,11 +65,14 @@ class fundamental:
         외국인 보유 비중 데이터프레임
         :return:
         """
-        df = pd.DataFrame(self.__foreigner__["CHART"])[['TRD_DT', 'J_PRC', 'FRG_RT']].rename(columns={
-            'TRD_DT': '날짜', 'J_PRC': '종가', 'FRG_RT': '외국인보유비중'
-        }).set_index(keys='날짜')
-        df.index = pd.to_datetime(df.index)
-        return df
+        if self._foreigner_.empty:
+            url = f"http://cdn.fnguide.com/SVO2/json/chart/01_01/chart_A{self.ticker}_1Y.json"
+            data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+            self._foreigner_ = pd.DataFrame(data["CHART"])[['TRD_DT', 'J_PRC', 'FRG_RT']].rename(columns={
+                'TRD_DT': '날짜', 'J_PRC': '종가', 'FRG_RT': '외국인보유비중'
+            }).set_index(keys='날짜')
+            self._foreigner_.index = pd.to_datetime(self._foreigner_.index)
+        return self._foreigner_
 
     @property
     def consensus(self) -> pd.DataFrame:
@@ -84,11 +80,14 @@ class fundamental:
         컨센선스 Consensus 데이터프레임
         :return:
         """
-        df = pd.DataFrame(self.__consensus__['CHART']).rename(columns={
-            'TRD_DT': '날짜', 'VAL1': '투자의견', 'VAL2': '목표주가', 'VAL3': '종가'
-        }).set_index(keys='날짜')
-        df.index = pd.to_datetime(df.index)
-        return df
+        if self._consensus_.empty:
+            url = f"http://cdn.fnguide.com/SVO2/json/chart/01_02/chart_A{self.ticker}.json"
+            data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+            self._consensus_ = pd.DataFrame(data['CHART']).rename(columns={
+                'TRD_DT': '날짜', 'VAL1': '투자의견', 'VAL2': '목표주가', 'VAL3': '종가'
+            }).set_index(keys='날짜')
+            self._consensus_.index = pd.to_datetime(self._consensus_.index)
+        return self._consensus_
 
     @property
     def short_sell(self) -> pd.DataFrame:
@@ -96,11 +95,14 @@ class fundamental:
         차입공매도 비중 데이터프레임
         :return:
         """
-        df = pd.DataFrame(self.__shorts__['CHART']).rename(columns={
-            'TRD_DT':'날짜', 'VAL':'차입공매도비중', 'ADJ_PRC':'수정 종가'
-        }).set_index(keys='날짜')
-        df.index = pd.to_datetime(df.index)
-        return df
+        if self._shorts_.empty:
+            url = f"http://cdn.fnguide.com/SVO2/json/chart/11_01/chart_A{self.ticker}_SELL1Y.json"
+            data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+            self._shorts_ = pd.DataFrame(data['CHART']).rename(columns={
+                'TRD_DT':'날짜', 'VAL':'차입공매도비중', 'ADJ_PRC':'수정 종가'
+            }).set_index(keys='날짜')
+            self._shorts_.index = pd.to_datetime(self._shorts_.index)
+        return self._shorts_
 
     @property
     def annual_statement(self) -> pd.DataFrame:

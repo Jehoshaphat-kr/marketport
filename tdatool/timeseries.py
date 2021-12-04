@@ -12,7 +12,7 @@ today = datetime.today()
 __root__ = os.path.dirname(os.path.dirname(__file__))
 class technical:
 
-    def __init__(self, ticker: str = '005930', src: str='git', period: int = 5):
+    def __init__(self, ticker: str = '005930', src: str = 'git', period: int = 5):
 
         # Parameter
         self.ticker = ticker

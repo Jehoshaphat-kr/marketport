@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from findiff import FinDiff
-from tdatool.analytics import Technical, Fundamental
+from tdatool.visualize import Technical, Fundamental
 
 
 root = os.path.dirname(os.path.dirname(__file__))
