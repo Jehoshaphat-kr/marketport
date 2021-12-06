@@ -64,7 +64,6 @@ class evaluation(tech, fund):
         return self._spectra_
 
 if __name__ == "__main__":
-    ticker = '006400'
-    ev = evaluation(ticker=ticker)
+    ev = evaluation(ticker='006400')
     # print(ev.performance)
     # print(ev.spectra)

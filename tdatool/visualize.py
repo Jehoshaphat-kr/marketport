@@ -404,10 +404,11 @@ class Fundamental(fundamental):
         # 컨센서스
         df = self.consensus.copy()
         for col in ['목표주가', '종가']:
+            sr = df[col].dropna()
             fig.add_trace(go.Scatter(
                 name=col,
-                x=df.index,
-                y=df[col].astype(int),
+                x=sr.index,
+                y=sr.astype(int),
                 meta=reform(df.index),
                 hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,}원<extra></extra>'
             ), row=1, col=2)
@@ -508,14 +509,16 @@ class Fundamental(fundamental):
                 opacity=0.9,
             ), row=2, col=1)
 
+        asset = df_a['자산총계'].fillna(0).astype(int)
+        debt = df_a['부채총계'].fillna(0).astype(int)
+        capital = df_a['자본총계'].fillna(0).astype(int)
         fig.add_trace(go.Bar(
             x=df_a.index,
-            y=df_a['자산총계'].astype(int),
+            y=asset,
             name='자산',
-            text=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['자산총계'].astype(int)],
-            meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df_a['부채총계'].astype(int)],
-            customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in
-                        df_a['자본총계'].astype(int)],
+            text=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in asset],
+            meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in debt],
+            customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in capital],
             hovertemplate='자산: %{text}억원<br>부채: %{meta}억원<br>자본: %{customdata}억원<extra></extra>',
             texttemplate=' ',
             marker=dict(color='green'),
@@ -526,7 +529,7 @@ class Fundamental(fundamental):
 
         fig.add_trace(go.Bar(
             x=df_a.index,
-            y=df_a['부채총계'].astype(int),
+            y=debt,
             name='부채',
             hoverinfo='skip',
             marker=dict(color='red'),

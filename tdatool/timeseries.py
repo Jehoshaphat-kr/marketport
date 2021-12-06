@@ -291,7 +291,7 @@ class technical:
 
 
 if __name__ == "__main__":
-    api = technical(ticker='005930', src='local')
+    api = technical(ticker='009970', src='local')
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)

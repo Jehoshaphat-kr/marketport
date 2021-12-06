@@ -1,5 +1,6 @@
 import requests, tdatool, json
 import pandas as pd
+import numpy as np
 from bs4 import BeautifulSoup as Soup
 from pykrx import stock
 from datetime import datetime, timedelta
@@ -87,6 +88,7 @@ class fundamental:
                 'TRD_DT': '날짜', 'VAL1': '투자의견', 'VAL2': '목표주가', 'VAL3': '종가'
             }).set_index(keys='날짜')
             self._consensus_.index = pd.to_datetime(self._consensus_.index)
+            self._consensus_['목표주가'] = self._consensus_['목표주가'].apply(lambda x:x if x else np.nan)
         return self._consensus_
 
     @property
@@ -212,14 +214,14 @@ class fundamental:
 
 
 if __name__ == "__main__":
-    api = fundamental(ticker='000660')
-    print(api.business_summary)
+    api = fundamental(ticker='009970')
+    # print(api.business_summary)
     # print(api.annual_statement)
     # print(api.annual_statement['PEG'])
     # print(api.quarter_statement)
     # print(api.foreigner)
     # print(api.short_sell)
-    # print(api.consensus)
+    print(api.consensus)
     # print(api.multi_factor)
     # print(api.sales_product)
     # print(api.market_share)

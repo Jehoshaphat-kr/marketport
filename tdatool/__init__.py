@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from findiff import FinDiff
+from tdatool.evaluate import evaluation as TDAT
 from tdatool.visualize import Technical, Fundamental
 
 
