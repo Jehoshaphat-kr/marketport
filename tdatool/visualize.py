@@ -1,9 +1,7 @@
 import os
+import pandas as pd
 import plotly.graph_objects as go
 import plotly.offline as of
-import pandas as pd
-from tdatool.timeseries import technical
-from tdatool.finances import fundamental
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
@@ -27,6 +25,7 @@ root = os.path.join(
 if not os.path.isdir(root):
     os.makedirs(name=root)
 
+
 def reform(span):
     """
     날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
@@ -35,8 +34,74 @@ def reform(span):
     """
     return [f'{d.year}/{d.month}/{d.day}' for d in span]
 
+def obj_price(df:pd.DataFrame) -> dict:
+    """
+    기본 주가 차트 요소
+    :param df: 주가 데이터프레임
+    :return: dict() :: key = ['일봉', '시가', '고가', '저가', '종가']
+    """
+    require = ['시가', '고가', '저가', '종가']
+    columns = df.columns.values
+    if not len([x for x in require if x in columns]) == len(require):
+        raise KeyError(f'argument not sufficient for price data')
 
-class Technical(technical):
+    objects = dict()
+    objects['일봉'] = go.Candlestick(
+        name='일봉', x=df.index,
+        open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'],
+        increasing_line=dict(color='red'), decreasing_line=dict(color='royalblue'),
+        visible=True, showlegend=True,
+    )
+
+    for col in require:
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            line=dict(color='grey'),
+            visible='legendonly', showlegend=True,
+            meta=reform(span=df.index),
+            hovertemplate=col + ': %{y:,}원<br>날짜: %{meta}<extra></extra>',
+        )
+    return objects
+
+def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
+    """
+    볼린저밴드 차트 요소
+    :param df: 볼린저밴드 데이터프레임
+    :param group: 범례 그룹 여부
+    :return: dict() :: key = ['상한선', '기준선', '하한선', '상한지시', '하한지시', '밴드폭', '신호']
+    """
+    require = ['상한선', '기준선', '하한선']
+    columns = df.columns.values
+    if not len([x for x in require if x in columns]) == len(require):
+        raise KeyError(f'argument not sufficient for price data')
+
+    objects = dict()
+    for n, col in enumerate(['상한선', '기준선', '하한선']):
+        objects[col] = go.Scatter(
+            name='볼린저밴드', x=df.index, y=df[col],
+            mode='lines', line=dict(width=0.5, color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
+            visible='legendonly', showlegend=False if n else True,
+            legendgroup='볼린저밴드',
+            meta=reform(span=df.index),
+            hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:,d}원<extra></extra>',
+        )
+    for n, col in enumerate(['상한지시', '하한지시']):
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            mode='markers', marker=dict(
+                symbol=f'triangle-{"up" if n else "down"}', color='red' if n else 'royalblue', size=9
+            ), visible='legendonly', showlegend=False,
+            legendgroup='볼린저밴드',
+            hoverinfo='skip'
+        )
+
+    return objects
+
+class Chart:
+    def __init__(self, obj):
+        self.obj = obj
+        return
+
     def layout_basic(self, title: str = '', x_title: str = '날짜', y_title: str = ''):
         """
         기본 차트 레이아웃
@@ -46,7 +111,7 @@ class Technical(technical):
         :return:
         """
         return go.Layout(
-            title=f'<b>{self.name}[{self.ticker}]</b> : {title}',
+            title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : {title}',
             plot_bgcolor='white',
             annotations=[
                 dict(
@@ -91,34 +156,13 @@ class Technical(technical):
         """
         fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05)
 
-        # 가격차트::일봉
-        price = self.price[['시가', '고가', '저가', '종가']].copy()
-        fig.add_trace(go.Candlestick(
-            x=price.index,
-            open=price['시가'],
-            high=price['고가'],
-            low=price['저가'],
-            close=price['종가'],
-            increasing_line=dict(color='red'),
-            decreasing_line=dict(color='royalblue'),
-            name='일봉',
-            showlegend=True,
-        ))
+        # 주가 차트
+        for obj in obj_price(df=self.obj.price):
+            fig.add_trace(obj, row=1, col=1)
 
-        # 가격차트::단일 주가
-        for col in price.columns:
-            fig.add_trace(go.Scatter(
-                name=col,
-                x=price.index,
-                y=price[col],
-                meta=reform(span=price.index),
-                line=dict(color='grey'),
-                hovertemplate=col + ': %{y:,}원<br>날짜: %{meta}<extra></extra>',
-                visible='legendonly',
-            ))
 
         # 피벗 포인트
-        trend = self.trend.copy()
+        trend = self.obj.trend.copy()
         for col in [col for col in trend.columns if col.startswith('PV')]:
             df = trend[col].dropna()
             fig.add_trace(go.Scatter(
@@ -164,42 +208,12 @@ class Technical(technical):
                 showlegend=False if '저항' in col else True
             ))
 
-        # 지지/저항선
-        support_resist = self.thres.copy()
-        for n, date in enumerate(support_resist.index):
-            name = support_resist.loc[date, '종류']
-            fig.add_trace(go.Scatter(
-                x=[date + timedelta(dt) for dt in range(-20, 21)],
-                y=[support_resist.loc[date, '가격']] * 40,
-                mode='lines',
-                line=dict(color='blue' if name.startswith('저항선') else 'red', dash='dot', width=2),
-                name='지지/저항선',
-                legendgroup='지지/저항선',
-                showlegend=False if n else True,
-                visible='legendonly',
-                hovertemplate=name + f'@{date.date()}<br>' + '가격:%{y:,}원<extra></extra>'
-            ))
-
         # 볼린저 밴드
-        band = self.bollinger.copy()
-        for n, col in enumerate(band.columns):
-            name = '하한선' if n else '상한선'
-            fig.add_trace(go.Scatter(
-                name='볼린저밴드',
-                x=band.index,
-                y=band[col].astype(int),
-                fill='tonexty' if n else None,
-                legendgroup='볼린저밴드',
-                showlegend=False if n else True,
-                visible='legendonly',
-                meta=reform(span=band.index),
-                mode='lines',
-                line=dict(width=0.5, color='rgb(184, 247, 212)'),
-                hovertemplate=name + '<br>날짜: %{meta}<br>값: %{y:,}원<extra></extra>',
-            ))
+        band = self.obj.bollinger.copy()
+
 
         # 필터선
-        guide = self.filters.copy()
+        guide = self.obj.filters.copy()
         for col in guide.columns:
             if col.startswith('FIR') or col.startswith('EMA') or col.startswith('IIR'):
                 continue
@@ -214,11 +228,11 @@ class Technical(technical):
             ))
 
         # 거래량
-        volume = self.price['거래량']
+        volume = self.obj.price['거래량']
         fig.add_trace(go.Bar(
             x=volume.index,
             y=volume.values,
-            customdata=reform(span=self.price.index),
+            customdata=reform(span=self.obj.price.index),
             name='거래량',
             marker=dict(
                 color=['blue' if d < 0 else 'red' for d in volume.pct_change().fillna(1)]
@@ -237,7 +251,7 @@ class Technical(technical):
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-기본차트.html"), auto_open=False)
+            of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-기본차트.html"), auto_open=False)
         return fig
 
     def show_trend(self, show: bool = False, save: bool = False):
@@ -251,7 +265,7 @@ class Technical(technical):
                             specs=[[{"secondary_y": True}], [{"secondary_y": True}]])
 
         # 종가 정보
-        price = self.price['종가']
+        price = self.obj.price['종가']
         tic = price.index[0]
         toc = price.index[-1]
         fig.add_trace(go.Scatter(
@@ -263,8 +277,8 @@ class Technical(technical):
         ), row=1, col=1, secondary_y=False)
 
         # 추세선
-        point = self.bend_point.copy()
-        trend = self.guidance.copy()
+        point = self.obj.bend_point.copy()
+        trend = self.obj.guidance.copy()
         for col in trend.columns:
             if col.startswith('d'):
                 continue
@@ -298,7 +312,7 @@ class Technical(technical):
             ), row=1, col=1, secondary_y=True)
 
         # MACD
-        data = self.macd
+        data = self.obj.macd
         form = reform(span=data.index)
         for n, col in enumerate(['MACD', 'MACD-Sig']):
             fig.add_trace(go.Scatter(
@@ -351,276 +365,276 @@ class Technical(technical):
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-추세차트.html"), auto_open=False)
+            of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-추세차트.html"), auto_open=False)
         return fig
 
 
-class Fundamental(fundamental):
-    def layout_basic(self):
-        return
-
-    def show_business(self, save: bool=False, show: bool=False):
-        """
-        기업 사업 개요 텍스트 저장 또는 출력
-        :param save:
-        :param show:
-        :return:
-        """
-        if save:
-            with open(os.path.join(root, f"{self.ticker}{self.name}-개요.txt"), 'w', encoding='utf-8') as file:
-                file.write(self.summary)
-
-        if show:
-            print(self.summary)
-        return
-
-    def show_summary(self, save: bool = False, show: bool = False) -> go.Figure:
-        """
-        [0, 0] 매출 제품 비중
-        [0, 1] 멀티 팩터
-        [1, 0] 컨센서스
-        [1, 1] 외국인 지분율
-        :param save: 
-        :param show: 
-        :return: 
-        """
-        fig = make_subplots(
-            rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.1,
-            subplot_titles=(" ", "컨센서스", "외국인 보유비중", "차입공매도 비중"),
-            specs=[[{"type": "polar"}, {"type": "xy"}],
-                   [{"type": "xy", "secondary_y": True}, {"type": "xy", 'secondary_y': True}]]
-        )
-        # 멀티 팩터
-        df = self.multi_factor
-        for n, col in enumerate(df.columns):
-            fig.add_trace(go.Scatterpolar(
-                name=col,
-                r=df[col].astype(float),
-                theta=df.index,
-                fill='toself',
-                showlegend=True,
-                visible='legendonly' if n else True,
-                hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
-            ), row=1, col=1)
-
-        # 컨센서스
-        df = self.consensus.copy()
-        for col in ['목표주가', '종가']:
-            sr = df[col].dropna()
-            fig.add_trace(go.Scatter(
-                name=col,
-                x=sr.index,
-                y=sr.astype(int),
-                meta=reform(df.index),
-                hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,}원<extra></extra>'
-            ), row=1, col=2)
-
-        # 외국인보유비중
-        df = self.foreigner.copy()
-        for col in df.columns:
-            flag_price = col.startswith('종가')
-            form = ': %{y:,}원' if flag_price else ': %{y}%'
-            fig.add_trace(go.Scatter(
-                name=col + '(지분율)' if flag_price else col,
-                x=df.index,
-                y=df[col].astype(int if flag_price else float),
-                meta=reform(df.index),
-                hovertemplate='날짜: %{meta}<br>' + col + form + '<extra></extra>'
-            ), row=2, col=1, secondary_y=False if flag_price else True)
-
-        # 차입공매도비중
-        df = self.short_sell.copy()
-        for col in df.columns:
-            is_price = col.endswith('종가')
-            form = ': %{y:,}원' if is_price else ': %{y}%'
-            fig.add_trace(go.Scatter(
-                name=col,
-                x=df.index,
-                y=df[col].astype(int if is_price else float),
-                meta=reform(df.index),
-                hovertemplate='날짜: %{meta}<br>' + col + form + '<extra></extra>'
-            ), row=2, col=2, secondary_y=False if is_price else True)
-            
-        # 레이아웃
-        fig.update_layout(dict(
-            title=f'<b>{self.name}[{self.ticker}]</b> : 기업 평가 및 수급',
-            plot_bgcolor='white'
-        ))
-        fig.update_xaxes(title_text="날짜", showgrid=True, gridcolor='lightgrey')
-        fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=1, col=2)
-        fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=2, col=1, secondary_y=False)
-        fig.update_yaxes(title_text="비중[%]", showgrid=False, row=2, col=1, secondary_y=True)
-        fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=2, col=2, secondary_y=False)
-        fig.update_yaxes(title_text="비중[%]", showgrid=False, row=2, col=2, secondary_y=True)
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-수급평가.html"), auto_open=False)
-        return fig
-
-    def show_sales(self, save: bool = False, show: bool = False) -> go.Figure:
-        """
-        [0, 0] 연간 시가총액/매출/영업이익/당기순이익
-        [0, 1] 분기 시가총액/매출/영업이익/당기순이익
-        [1, 0] 판관비/매출원가/R&D투자비융
-        [1, 1] 자산/부채/자본
-        :param save:
-        :param show:
-        :return:
-        """
-        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
-                            subplot_titles=("매출 비중", "연간 실적", "SG&A, 매출원가 및 R&D투자", "자산"),
-                            specs=[[{"type": "pie"}, {"type": "scatter"}], [{"type": "scatter"}, {"type": "scatter"}]])
-
-        df = self.sales_product.copy()
-        fig.add_trace(go.Pie(
-            name='Product',
-            labels=df.index,
-            values=df,
-            textinfo='label+percent',
-            insidetextorientation='radial',
-            showlegend=False,
-            hoverinfo='label+percent'
-        ), row=1, col=1)
-
-        df_a = self.annual_statement
-        key = '매출액'
-        key = '순영업수익' if '순영업수익' in df_a.columns else key
-        key = '보험료수익' if '보험료수익' in df_a.columns else key
-        for n, col in enumerate(['시가총액', key, '영업이익', '당기순이익']):
-            y = df_a[col].fillna(0).astype(int)
-            fig.add_trace(go.Bar(
-                x=df_a.index,
-                y=y,
-                name=f'연간{col}',
-                marker=dict(color=colors[n]),
-                legendgroup=col,
-                meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
-                hovertemplate=col + ': %{meta}억원<extra></extra>',
-                opacity=0.9,
-            ), row=1, col=2)
-
-        summary = pd.concat(objs=[self.sg_a, self.sales_cost, self.rnd_invest['R&D투자비중']], axis=1)
-        summary.sort_index(inplace=True)
-        for n, col in enumerate(summary.columns):
-            fig.add_trace(go.Bar(
-                x=summary.index,
-                y=summary[col].astype(float),
-                name=col,
-                hovertemplate=col + ': %{y}%<extra></extra>',
-                opacity=0.9,
-            ), row=2, col=1)
-
-        asset = df_a['자산총계'].fillna(0).astype(int)
-        debt = df_a['부채총계'].fillna(0).astype(int)
-        capital = df_a['자본총계'].fillna(0).astype(int)
-        fig.add_trace(go.Bar(
-            x=df_a.index,
-            y=asset,
-            name='자산',
-            text=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in asset],
-            meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in debt],
-            customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in capital],
-            hovertemplate='자산: %{text}억원<br>부채: %{meta}억원<br>자본: %{customdata}억원<extra></extra>',
-            texttemplate=' ',
-            marker=dict(color='green'),
-            offsetgroup=0,
-            opacity=0.9,
-            showlegend=False
-        ), row=2, col=2)
-
-        fig.add_trace(go.Bar(
-            x=df_a.index,
-            y=debt,
-            name='부채',
-            hoverinfo='skip',
-            marker=dict(color='red'),
-            offsetgroup=0,
-            opacity=0.8,
-            showlegend=False
-        ), row=2, col=2)
-
-        fig.update_layout(dict(
-            title=f'<b>{self.name}[{self.ticker}]</b> : 실적, 지출 및 자산',
-            plot_bgcolor='white'
-        ))
-        fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=1)
-        fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=2)
-        fig.update_yaxes(title_text="비율[%]", gridcolor='lightgrey', row=2, col=1)
-        fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=2, col=2)
-
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-실적.html"), auto_open=False)
-        return fig
-
-    def show_multiple(self, save: bool = False, show: bool = False) -> go.Figure:
-        """
-        [0, 0] 연간 재무비율:: ROE/ROA/영업이익률
-        [0, 1] 분기 재무비율:: ROE/ROA/영업이익률
-        [1, 0] 연간 투자배수:: PER/PBR/PSR/PEG
-        [1, 1] 배당 수익률
-
-        :param save:
-        :param show:
-        :return:
-        """
-        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
-                            subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "EPS, BPS"))
-
-        df_a = self.annual_statement
-        df_q = self.quarter_statement
-        for n, col in enumerate(['ROA', 'ROE', '영업이익률']):
-            fig.add_trace(go.Bar(
-                x=df_a.index,
-                y=df_a[col],
-                name=f'연간{col}',
-                marker=dict(color=colors[n]),
-                legendgroup=col,
-                hovertemplate=col + ': %{y}%<extra></extra>',
-                opacity=0.9,
-            ), row=1, col=1)
-
-            fig.add_trace(go.Bar(
-                x=df_q.index,
-                y=df_q[col],
-                name=f'분기{col}',
-                marker=dict(color=colors[n]),
-                legendgroup=col,
-                hovertemplate=col + ': %{y}%<extra></extra>',
-                opacity=0.9,
-            ), row=1, col=2)
-
-        for n, col in enumerate(['PER', 'PBR', 'PSR', 'PEG']):
-            fig.add_trace(go.Bar(
-                x=df_a.index,
-                y=df_a[col],
-                name=col,
-                hovertemplate=col + ': %{y}<extra></extra>',
-                opacity=0.9
-            ), row=2, col=1)
-
-        for n, col in enumerate(['EPS(원)', 'BPS(원)']):
-            fig.add_trace(go.Bar(
-                x=df_a.index,
-                y=df_a[col],
-                name=col.replace("(원)", ""),
-                hovertemplate=col + ': %{y:,}원<extra></extra>',
-                opacity=0.9
-            ), row=2, col=2)
-
-        fig.update_layout(dict(
-            title=f'<b>{self.name}[{self.ticker}]</b> : 투자 비율 및 배수',
-            plot_bgcolor='white'
-        ))
-        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=1)
-        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=2)
-        fig.update_yaxes(title_text="-", gridcolor='lightgrey', row=2, col=1)
-        fig.update_yaxes(title_text="원", gridcolor='lightgrey', row=2, col=2)
-
-        if show:
-            fig.show()
-        if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-배수비율.html"), auto_open=False)
-        return fig
+# class Fundamental(fundamental):
+#     def layout_basic(self):
+#         return
+#
+#     def show_business(self, save: bool=False, show: bool=False):
+#         """
+#         기업 사업 개요 텍스트 저장 또는 출력
+#         :param save:
+#         :param show:
+#         :return:
+#         """
+#         if save:
+#             with open(os.path.join(root, f"{self.ticker}{self.name}-개요.txt"), 'w', encoding='utf-8') as file:
+#                 file.write(self.summary)
+#
+#         if show:
+#             print(self.summary)
+#         return
+#
+#     def show_summary(self, save: bool = False, show: bool = False) -> go.Figure:
+#         """
+#         [0, 0] 매출 제품 비중
+#         [0, 1] 멀티 팩터
+#         [1, 0] 컨센서스
+#         [1, 1] 외국인 지분율
+#         :param save:
+#         :param show:
+#         :return:
+#         """
+#         fig = make_subplots(
+#             rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.1,
+#             subplot_titles=(" ", "컨센서스", "외국인 보유비중", "차입공매도 비중"),
+#             specs=[[{"type": "polar"}, {"type": "xy"}],
+#                    [{"type": "xy", "secondary_y": True}, {"type": "xy", 'secondary_y': True}]]
+#         )
+#         # 멀티 팩터
+#         df = self.multi_factor
+#         for n, col in enumerate(df.columns):
+#             fig.add_trace(go.Scatterpolar(
+#                 name=col,
+#                 r=df[col].astype(float),
+#                 theta=df.index,
+#                 fill='toself',
+#                 showlegend=True,
+#                 visible='legendonly' if n else True,
+#                 hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
+#             ), row=1, col=1)
+#
+#         # 컨센서스
+#         df = self.consensus.copy()
+#         for col in ['목표주가', '종가']:
+#             sr = df[col].dropna()
+#             fig.add_trace(go.Scatter(
+#                 name=col,
+#                 x=sr.index,
+#                 y=sr.astype(int),
+#                 meta=reform(df.index),
+#                 hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,}원<extra></extra>'
+#             ), row=1, col=2)
+#
+#         # 외국인보유비중
+#         df = self.foreigner.copy()
+#         for col in df.columns:
+#             flag_price = col.startswith('종가')
+#             form = ': %{y:,}원' if flag_price else ': %{y}%'
+#             fig.add_trace(go.Scatter(
+#                 name=col + '(지분율)' if flag_price else col,
+#                 x=df.index,
+#                 y=df[col].astype(int if flag_price else float),
+#                 meta=reform(df.index),
+#                 hovertemplate='날짜: %{meta}<br>' + col + form + '<extra></extra>'
+#             ), row=2, col=1, secondary_y=False if flag_price else True)
+#
+#         # 차입공매도비중
+#         df = self.short_sell.copy()
+#         for col in df.columns:
+#             is_price = col.endswith('종가')
+#             form = ': %{y:,}원' if is_price else ': %{y}%'
+#             fig.add_trace(go.Scatter(
+#                 name=col,
+#                 x=df.index,
+#                 y=df[col].astype(int if is_price else float),
+#                 meta=reform(df.index),
+#                 hovertemplate='날짜: %{meta}<br>' + col + form + '<extra></extra>'
+#             ), row=2, col=2, secondary_y=False if is_price else True)
+#
+#         # 레이아웃
+#         fig.update_layout(dict(
+#             title=f'<b>{self.name}[{self.ticker}]</b> : 기업 평가 및 수급',
+#             plot_bgcolor='white'
+#         ))
+#         fig.update_xaxes(title_text="날짜", showgrid=True, gridcolor='lightgrey')
+#         fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=1, col=2)
+#         fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=2, col=1, secondary_y=False)
+#         fig.update_yaxes(title_text="비중[%]", showgrid=False, row=2, col=1, secondary_y=True)
+#         fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=2, col=2, secondary_y=False)
+#         fig.update_yaxes(title_text="비중[%]", showgrid=False, row=2, col=2, secondary_y=True)
+#         if show:
+#             fig.show()
+#         if save:
+#             of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-수급평가.html"), auto_open=False)
+#         return fig
+#
+#     def show_sales(self, save: bool = False, show: bool = False) -> go.Figure:
+#         """
+#         [0, 0] 연간 시가총액/매출/영업이익/당기순이익
+#         [0, 1] 분기 시가총액/매출/영업이익/당기순이익
+#         [1, 0] 판관비/매출원가/R&D투자비융
+#         [1, 1] 자산/부채/자본
+#         :param save:
+#         :param show:
+#         :return:
+#         """
+#         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
+#                             subplot_titles=("매출 비중", "연간 실적", "SG&A, 매출원가 및 R&D투자", "자산"),
+#                             specs=[[{"type": "pie"}, {"type": "scatter"}], [{"type": "scatter"}, {"type": "scatter"}]])
+#
+#         df = self.sales_product.copy()
+#         fig.add_trace(go.Pie(
+#             name='Product',
+#             labels=df.index,
+#             values=df,
+#             textinfo='label+percent',
+#             insidetextorientation='radial',
+#             showlegend=False,
+#             hoverinfo='label+percent'
+#         ), row=1, col=1)
+#
+#         df_a = self.annual_statement
+#         key = '매출액'
+#         key = '순영업수익' if '순영업수익' in df_a.columns else key
+#         key = '보험료수익' if '보험료수익' in df_a.columns else key
+#         for n, col in enumerate(['시가총액', key, '영업이익', '당기순이익']):
+#             y = df_a[col].fillna(0).astype(int)
+#             fig.add_trace(go.Bar(
+#                 x=df_a.index,
+#                 y=y,
+#                 name=f'연간{col}',
+#                 marker=dict(color=colors[n]),
+#                 legendgroup=col,
+#                 meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in y],
+#                 hovertemplate=col + ': %{meta}억원<extra></extra>',
+#                 opacity=0.9,
+#             ), row=1, col=2)
+#
+#         summary = pd.concat(objs=[self.sg_a, self.sales_cost, self.rnd_invest['R&D투자비중']], axis=1)
+#         summary.sort_index(inplace=True)
+#         for n, col in enumerate(summary.columns):
+#             fig.add_trace(go.Bar(
+#                 x=summary.index,
+#                 y=summary[col].astype(float),
+#                 name=col,
+#                 hovertemplate=col + ': %{y}%<extra></extra>',
+#                 opacity=0.9,
+#             ), row=2, col=1)
+#
+#         asset = df_a['자산총계'].fillna(0).astype(int)
+#         debt = df_a['부채총계'].fillna(0).astype(int)
+#         capital = df_a['자본총계'].fillna(0).astype(int)
+#         fig.add_trace(go.Bar(
+#             x=df_a.index,
+#             y=asset,
+#             name='자산',
+#             text=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in asset],
+#             meta=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in debt],
+#             customdata=[str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in capital],
+#             hovertemplate='자산: %{text}억원<br>부채: %{meta}억원<br>자본: %{customdata}억원<extra></extra>',
+#             texttemplate=' ',
+#             marker=dict(color='green'),
+#             offsetgroup=0,
+#             opacity=0.9,
+#             showlegend=False
+#         ), row=2, col=2)
+#
+#         fig.add_trace(go.Bar(
+#             x=df_a.index,
+#             y=debt,
+#             name='부채',
+#             hoverinfo='skip',
+#             marker=dict(color='red'),
+#             offsetgroup=0,
+#             opacity=0.8,
+#             showlegend=False
+#         ), row=2, col=2)
+#
+#         fig.update_layout(dict(
+#             title=f'<b>{self.name}[{self.ticker}]</b> : 실적, 지출 및 자산',
+#             plot_bgcolor='white'
+#         ))
+#         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=1)
+#         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=2)
+#         fig.update_yaxes(title_text="비율[%]", gridcolor='lightgrey', row=2, col=1)
+#         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=2, col=2)
+#
+#         if show:
+#             fig.show()
+#         if save:
+#             of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-실적.html"), auto_open=False)
+#         return fig
+#
+#     def show_multiple(self, save: bool = False, show: bool = False) -> go.Figure:
+#         """
+#         [0, 0] 연간 재무비율:: ROE/ROA/영업이익률
+#         [0, 1] 분기 재무비율:: ROE/ROA/영업이익률
+#         [1, 0] 연간 투자배수:: PER/PBR/PSR/PEG
+#         [1, 1] 배당 수익률
+#
+#         :param save:
+#         :param show:
+#         :return:
+#         """
+#         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
+#                             subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "EPS, BPS"))
+#
+#         df_a = self.annual_statement
+#         df_q = self.quarter_statement
+#         for n, col in enumerate(['ROA', 'ROE', '영업이익률']):
+#             fig.add_trace(go.Bar(
+#                 x=df_a.index,
+#                 y=df_a[col],
+#                 name=f'연간{col}',
+#                 marker=dict(color=colors[n]),
+#                 legendgroup=col,
+#                 hovertemplate=col + ': %{y}%<extra></extra>',
+#                 opacity=0.9,
+#             ), row=1, col=1)
+#
+#             fig.add_trace(go.Bar(
+#                 x=df_q.index,
+#                 y=df_q[col],
+#                 name=f'분기{col}',
+#                 marker=dict(color=colors[n]),
+#                 legendgroup=col,
+#                 hovertemplate=col + ': %{y}%<extra></extra>',
+#                 opacity=0.9,
+#             ), row=1, col=2)
+#
+#         for n, col in enumerate(['PER', 'PBR', 'PSR', 'PEG']):
+#             fig.add_trace(go.Bar(
+#                 x=df_a.index,
+#                 y=df_a[col],
+#                 name=col,
+#                 hovertemplate=col + ': %{y}<extra></extra>',
+#                 opacity=0.9
+#             ), row=2, col=1)
+#
+#         for n, col in enumerate(['EPS(원)', 'BPS(원)']):
+#             fig.add_trace(go.Bar(
+#                 x=df_a.index,
+#                 y=df_a[col],
+#                 name=col.replace("(원)", ""),
+#                 hovertemplate=col + ': %{y:,}원<extra></extra>',
+#                 opacity=0.9
+#             ), row=2, col=2)
+#
+#         fig.update_layout(dict(
+#             title=f'<b>{self.name}[{self.ticker}]</b> : 투자 비율 및 배수',
+#             plot_bgcolor='white'
+#         ))
+#         fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=1)
+#         fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=2)
+#         fig.update_yaxes(title_text="-", gridcolor='lightgrey', row=2, col=1)
+#         fig.update_yaxes(title_text="원", gridcolor='lightgrey', row=2, col=2)
+#
+#         if show:
+#             fig.show()
+#         if save:
+#             of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-배수비율.html"), auto_open=False)
+#         return fig

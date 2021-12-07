@@ -1,13 +1,11 @@
-from tdatool.finances import fundamental
-from tdatool.timeseries import technical
 import pandas as pd
+from tdatool.frame import prices, numbers
 
 
-# class Evaluate(tech, fund):
-class Evaluate(technical):
+class Evaluate(prices, numbers):
 
     def __init__(self, ticker: str, src: str = 'git', period:int = 5):
-        technical.__init__(self, ticker=ticker, src=src, period=period)
+        prices.__init__(self, ticker=ticker, src=src, period=period)
         # fund.__init__(self, ticker=ticker)
 
         self.ticker = ticker
@@ -67,7 +65,5 @@ class Evaluate(technical):
 if __name__ == "__main__":
     ev = Evaluate(ticker='006400')
 
-    chart = tester(obj=ev)
-    chart.show_something()
     # print(ev.performance)
-    # print(ev.spectra)
+    print(ev.spectra)

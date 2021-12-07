@@ -1,4 +1,4 @@
-import requests, tdatool, json
+import requests, json
 import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup as Soup
@@ -8,12 +8,12 @@ from urllib.request import urlopen
 
 
 today = datetime.today()
-class fundamental:
+class fetch:
 
     def __init__(self, ticker:str):
         # Parameter
         self.ticker = ticker
-        self.name = tdatool.meta.loc[ticker, '종목명']
+        self.name = stock.get_market_ticker_name(ticker=ticker)
         self.url1 = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
         self.url2 = "http://comp.fnguide.com/SVO2/ASP/SVD_Corp.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=&NewMenuID=102&stkGb=701"
 
@@ -28,6 +28,8 @@ class fundamental:
         self._consensus_ = pd.DataFrame()
         self._factors_ = pd.DataFrame()
         self._shorts_ = pd.DataFrame()
+        self._product_ = pd.DataFrame()
+        self._rnd_ = pd.DataFrame()
         return
 
     @property
@@ -45,9 +47,9 @@ class fundamental:
         ])
 
     @property
-    def multi_factor(self) -> pd.DataFrame:
+    def factors(self) -> pd.DataFrame:
         """
-        멀티 팰터 데이터프레임
+        멀티 팩터 데이터프레임
         :return:
         """
         if self._factors_.empty:
@@ -91,7 +93,7 @@ class fundamental:
         return self._consensus_
 
     @property
-    def short_sell(self) -> pd.DataFrame:
+    def short(self) -> pd.DataFrame:
         """
         차입공매도 비중 데이터프레임
         :return:
@@ -106,7 +108,7 @@ class fundamental:
         return self._shorts_
 
     @property
-    def annual_statement(self) -> pd.DataFrame:
+    def annual(self) -> pd.DataFrame:
         """
         연간 실적/비율/배수 데이터프레임
         :return:
@@ -114,7 +116,7 @@ class fundamental:
         return self.reform_statement(self.obj1[14] if self.is_separate else self.obj1[11])
 
     @property
-    def quarter_statement(self) -> pd.DataFrame:
+    def quarter(self) -> pd.DataFrame:
         """
         분기 실적/비율/배수 데이터프레임
         :return:
@@ -122,15 +124,23 @@ class fundamental:
         return self.reform_statement(self.obj1[15] if self.is_separate else self.obj1[12])
 
     @property
-    def sales_product(self) -> pd.DataFrame:
+    def product(self) -> pd.DataFrame:
         """
         주요 매출 상품:: [reform] 리폼 필요
         :return:
         """
-        return self.reform_product(df=self.obj2[2])
+        if self._product_.empty:
+            df = self.obj2[2]
+            df.set_index(keys='제품명', inplace=True)
+            df = df[df.columns[-1]].dropna()
+            df.drop(index=df[df < 0].index, inplace=True)
+            df[df.index[-1]] += (100 - df.sum())
+            df.name = '비중'
+            self._product_ = df.copy()
+        return self._product_
 
     @property
-    def sg_a(self) -> pd.DataFrame:
+    def sgna(self) -> pd.DataFrame:
         """
         판관비 Sales, General and Administrative (SG & A) 데이터프레임
         :return:
@@ -141,7 +151,7 @@ class fundamental:
         return df.T
 
     @property
-    def sales_cost(self) -> pd.DataFrame:
+    def cost(self) -> pd.DataFrame:
         """
         매출 원가율 데이터프레임
         :return:
@@ -152,12 +162,23 @@ class fundamental:
         return df.T
 
     @property
-    def rnd_invest(self) -> pd.DataFrame:
+    def rnd(self) -> pd.DataFrame:
         """
         R&D 투자현황
         :return:
         """
-        return self.reform_rnd(df=self.obj2[8])
+        if self._rnd_.empty:
+            df = self.obj2[8]
+            df.set_index(keys=['회계연도'], inplace=True)
+            df.index.name = None
+            df = df[['R&D 투자 총액 / 매출액 비중.1', '무형자산 처리 / 매출액 비중.1', '당기비용 처리 / 매출액 비중.1']]
+            df = df.rename(columns={'R&D 투자 총액 / 매출액 비중.1': 'R&D투자비중',
+                                    '무형자산 처리 / 매출액 비중.1': '무형자산처리비중',
+                                    '당기비용 처리 / 매출액 비중.1': '당기비용처리비중'})
+            if '관련 데이터가 없습니다.' in df.index:
+                df.drop(index=['관련 데이터가 없습니다.'], inplace=True)
+            self._rnd_ = df.copy()
+        return self._rnd_
 
     def reform_statement(self, df:pd.DataFrame) -> pd.DataFrame:
         """
@@ -188,50 +209,28 @@ class fundamental:
         df_copy['PEG'] = [round(v, 2) if v > 0 else 0 for v in peg]
         return df_copy
 
-    @staticmethod
-    def reform_product(df:pd.DataFrame) -> pd.DataFrame:
-        """
-        매출 상품 비중
-        :param df: 원 데이터프레임
-        :return:
-        """
-        df.set_index(keys='제품명', inplace=True)
-        df = df[df.columns[-1]].dropna()
-        df.drop(index=df[df < 0].index, inplace=True)
-        df[df.index[-1]] += (100 - df.sum())
-        df.name = '비중'
-        return df
-
-    @staticmethod
-    def reform_rnd(df:pd.DataFrame) -> pd.DataFrame:
-        """
-        R&D 투자 데이터프레임
-        :param df:
-        :return:
-        """
-        df.set_index(keys=['회계연도'], inplace=True)
-        df.index.name = None
-        df = df[['R&D 투자 총액 / 매출액 비중.1', '무형자산 처리 / 매출액 비중.1', '당기비용 처리 / 매출액 비중.1']]
-        df = df.rename(columns={'R&D 투자 총액 / 매출액 비중.1': 'R&D투자비중',
-                                  '무형자산 처리 / 매출액 비중.1': '무형자산처리비중',
-                                  '당기비용 처리 / 매출액 비중.1': '당기비용처리비중'})
-        if '관련 데이터가 없습니다.' in df.index:
-            df.drop(index=['관련 데이터가 없습니다.'], inplace=True)
-        return df
-
 
 if __name__ == "__main__":
-    api = fundamental(ticker='009970')
-    # print(api.business_summary)
-    # print(api.annual_statement)
-    # print(api.annual_statement['PEG'])
-    # print(api.quarter_statement)
-    # print(api.foreigner)
-    # print(api.short_sell)
-    print(api.consensus)
-    # print(api.multi_factor)
-    # print(api.sales_product)
-    # print(api.market_share)
-    # print(api.sg_a)
-    # print(api.sales_cost)
-    # print(api.rnd_invest)
+    api = fetch(ticker='009970')
+    print(api.name)
+    print("# 사업 소개")
+    print(api.summary)
+
+    # print("# 연간 실적")
+    # print(api.annual)
+    # print(api.annual['PEG'])
+
+    # print("# 분기 실적")
+    # print(api.quarter)
+    
+    print("# 외국인 보유 비율")
+    print(api.foreigner)
+
+    print("# 차입 공매도 현황")
+    print(api.short)
+    # print(api.consensus)
+    # print(api.factors)
+    # print(api.product)
+    # print(api.sgna)
+    # print(api.cost)
+    # print(api.rnd)
