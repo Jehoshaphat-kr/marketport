@@ -185,14 +185,16 @@ class Technical(technical):
         for n, col in enumerate(band.columns):
             name = '하한선' if n else '상한선'
             fig.add_trace(go.Scatter(
+                name='볼린저밴드',
                 x=band.index,
                 y=band[col].astype(int),
-                name='볼린저밴드',
                 fill='tonexty' if n else None,
                 legendgroup='볼린저밴드',
                 showlegend=False if n else True,
                 visible='legendonly',
                 meta=reform(span=band.index),
+                mode='lines',
+                line=dict(width=0.5, color='rgb(184, 247, 212)'),
                 hovertemplate=name + '<br>날짜: %{meta}<br>값: %{y:,}원<extra></extra>',
             ))
 
@@ -366,10 +368,10 @@ class Fundamental(fundamental):
         """
         if save:
             with open(os.path.join(root, f"{self.ticker}{self.name}-개요.txt"), 'w', encoding='utf-8') as file:
-                file.write(self.business_summary)
+                file.write(self.summary)
 
         if show:
-            print(self.business_summary)
+            print(self.summary)
         return
 
     def show_summary(self, save: bool = False, show: bool = False) -> go.Figure:

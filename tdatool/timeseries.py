@@ -26,12 +26,10 @@ class technical:
             'local': self.__fetch3__()
         }[src]
 
-        # Default Properties :: Calculate Filter, Trend Line, MACD
-        self.filters = self.__filtering__()
-        self.guidance = self.__guide__()
-        self.macd = self.__macd__()
-
         # Empty Property
+        self._filters_ = pd.DataFrame()
+        self._guidance_ = pd.DataFrame()
+        self._macd_ = pd.DataFrame()
         self._bend_point_ = pd.DataFrame()
         self._thres_ = pd.DataFrame()
         self._pivot_ = pd.DataFrame()
@@ -73,59 +71,68 @@ class technical:
         df.index = pd.to_datetime(df.index)
         return df[df.index >= (today - timedelta((365 * self.period) + 180))]
 
-    def __filtering__(self) -> pd.DataFrame:
+    @property
+    def filters(self) -> pd.DataFrame:
         """
         주가 가이드(필터) 데이터프레임
         :return:
         """
-        series = self.price['종가']
-        window = [5, 10, 20, 60, 120]
-        # FIR: SMA
-        objs = {f'SMA{win}D': series.rolling(window=win).mean() for win in window}
+        if self._filters_.empty:
+            series = self.price['종가']
+            window = [5, 10, 20, 60, 120]
+            # FIR: SMA
+            objs = {f'SMA{win}D': series.rolling(window=win).mean() for win in window}
 
-        # FIR: EMA
-        objs.update({f'EMA{win}D': series.ewm(span=win).mean() for win in window})
-        for win in window:
-            # IIR: BUTTERWORTH
-            cutoff = (252 / win) / (252 / 2)
-            coeff_a, coeff_b = butter(N=1, Wn=cutoff, btype='lowpass', analog=False, output='ba')
-            objs[f'IIR{win}D'] = pd.Series(data=filtfilt(coeff_a, coeff_b, series), index=series.index)
+            # FIR: EMA
+            objs.update({f'EMA{win}D': series.ewm(span=win).mean() for win in window})
+            for win in window:
+                # IIR: BUTTERWORTH
+                cutoff = (252 / win) / (252 / 2)
+                coeff_a, coeff_b = butter(N=1, Wn=cutoff, btype='lowpass', analog=False, output='ba')
+                objs[f'IIR{win}D'] = pd.Series(data=filtfilt(coeff_a, coeff_b, series), index=series.index)
 
-            # FIR: KAISER
-            N, beta = kaiserord(ripple={5: 10, 10: 12, 20: 20, 60: 60, 120: 80}[win], width=75 / (252 / 2))
-            taps = firwin(N, cutoff, window=('kaiser', beta))
-            objs[f'FIR{win}D'] = pd.Series(data=lfilter(taps, 1.0, series), index=series.index)
-        return pd.concat(objs=objs, axis=1)
+                # FIR: KAISER
+                N, beta = kaiserord(ripple={5: 10, 10: 12, 20: 20, 60: 60, 120: 80}[win], width=75 / (252 / 2))
+                taps = firwin(N, cutoff, window=('kaiser', beta))
+                objs[f'FIR{win}D'] = pd.Series(data=lfilter(taps, 1.0, series), index=series.index)
+            self._filters_ = pd.concat(objs=objs, axis=1)
+        return self._filters_
 
-    def __guide__(self) -> pd.DataFrame:
+    @property
+    def guidance(self) -> pd.DataFrame:
         """
         주가 전망 지수 데이터프레임
         :return:
         """
-        combination = [
-            ['중장기IIR', 'IIR60D', 'EMA120D'], ['중기IIR', 'IIR60D', 'EMA60D'], ['중단기IIR', 'IIR20D', 'EMA60D'],
-            ['중장기FIR', 'FIR60D', 'EMA120D'], ['중기FIR', 'FIR60D', 'EMA60D'], ['중단기FIR', 'FIR20D', 'EMA60D'],
-            ['중장기SMA', 'SMA60D', 'SMA120D'], ['중단기SMA', 'SMA20D', 'SMA60D'],
-            ['중장기EMA', 'EMA60D', 'EMA120D'], ['중단기EMA', 'EMA20D', 'EMA60D']
-        ]
-        objs = {}
-        for label, numerator, denominator in combination:
-            basis = self.filters[numerator] - self.filters[denominator]
-            objs[label] = basis
-            objs[f'd{label}'] = basis.diff()
-            objs[f'd2{label}'] = basis.diff().diff()
-        return pd.concat(objs=objs, axis=1)
+        if self._guidance_.empty:
+            combination = [
+                ['중장기IIR', 'IIR60D', 'EMA120D'], ['중기IIR', 'IIR60D', 'EMA60D'], ['중단기IIR', 'IIR20D', 'EMA60D'],
+                ['중장기FIR', 'FIR60D', 'EMA120D'], ['중기FIR', 'FIR60D', 'EMA60D'], ['중단기FIR', 'FIR20D', 'EMA60D'],
+                ['중장기SMA', 'SMA60D', 'SMA120D'], ['중단기SMA', 'SMA20D', 'SMA60D'],
+                ['중장기EMA', 'EMA60D', 'EMA120D'], ['중단기EMA', 'EMA20D', 'EMA60D']
+            ]
+            objs = {}
+            for label, numerator, denominator in combination:
+                basis = self.filters[numerator] - self.filters[denominator]
+                objs[label] = basis
+                objs[f'd{label}'] = basis.diff()
+                objs[f'd2{label}'] = basis.diff().diff()
+            self._guidance_ = pd.concat(objs=objs, axis=1)
+        return self._guidance_
 
-    def __macd__(self) -> pd.DataFrame:
+    @property
+    def macd(self) -> pd.DataFrame:
         """
         MACD 데이터프레임
         :return:
         """
-        series = self.price['종가']
-        main = series.ewm(span=12, adjust=False).mean() - series.ewm(span=26, adjust=False).mean()
-        assist = main.ewm(span=9, adjust=False).mean()
-        hist = main - assist
-        return pd.concat(objs={'MACD': main, 'MACD-Sig': assist, 'MACD-Hist': hist}, axis=1)
+        if self._macd_.empty:
+            series = self.price['종가']
+            main = series.ewm(span=12, adjust=False).mean() - series.ewm(span=26, adjust=False).mean()
+            assist = main.ewm(span=9, adjust=False).mean()
+            hist = main - assist
+            self._macd_ = pd.concat(objs={'MACD': main, 'MACD-Sig': assist, 'MACD-Hist': hist}, axis=1)
+        return self._macd_
 
     @property
     def bend_point(self) -> pd.DataFrame:

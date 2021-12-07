@@ -14,36 +14,35 @@ class fundamental:
         # Parameter
         self.ticker = ticker
         self.name = tdatool.meta.loc[ticker, '종목명']
-        url1 = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
-        url2 = "http://comp.fnguide.com/SVO2/ASP/SVD_Corp.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=&NewMenuID=102&stkGb=701"
-
-        # Fetch Company Business Summary
-        html = requests.get(url1 % ticker).content
-        soup = Soup(html, 'lxml')
-        texts = soup.find('ul', id='bizSummaryContent').find_all('li')
-        text = '\n\n '.join([text.text for text in texts])
-        self.business_summary = ' ' + text[0] + ''.join([
-            '.\n' if text[n] == '.' and not text[n-1].isdigit() else text[n] for n in range(1, len(text)-1)
-        ])
+        self.url1 = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
+        self.url2 = "http://comp.fnguide.com/SVO2/ASP/SVD_Corp.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=&NewMenuID=102&stkGb=701"
 
         # Fetch CompanyGuide SnapShot
-        self.obj1 = pd.read_html(url1 % ticker, encoding='utf-8')
-        self.obj2 = pd.read_html(url2 % ticker, encoding='utf-8')
+        self.obj1 = pd.read_html(self.url1 % ticker, encoding='utf-8')
+        self.obj2 = pd.read_html(self.url2 % ticker, encoding='utf-8')
         self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
 
         # Initialize DataFrames
+        self._marketcap_ = pd.DataFrame()
         self._foreigner_ = pd.DataFrame()
         self._consensus_ = pd.DataFrame()
         self._factors_ = pd.DataFrame()
         self._shorts_ = pd.DataFrame()
-
-        # Fetch Market-Cap
-        from_date = (today - timedelta(365 * 7)).strftime("%Y%m%d")
-        to_date = today.strftime("%Y%m%d")
-        self.cap = stock.get_market_cap_by_date(fromdate=from_date, todate=to_date, ticker=ticker, freq='m')
-        self.cap['ID'] = [date.strftime("%Y/%m") for date in self.cap.index]
-        self.cap['시가총액'] = (self.cap['시가총액'] / 100000000).astype(int)
         return
+
+    @property
+    def summary(self) -> str:
+        """
+        사업 소개
+        :return:
+        """
+        html = requests.get(self.url1 % self.ticker).content
+        soup = Soup(html, 'lxml')
+        texts = soup.find('ul', id='bizSummaryContent').find_all('li')
+        text = '\n\n '.join([text.text for text in texts])
+        return ' ' + text[0] + ''.join([
+            '.\n' if text[n] == '.' and not text[n - 1].isdigit() else text[n] for n in range(1, len(text) - 1)
+        ])
 
     @property
     def multi_factor(self) -> pd.DataFrame:
@@ -174,7 +173,15 @@ class fundamental:
         df_copy = df_copy.T
 
         key = [i[:-3] if i.endswith(')') else i for i in df_copy.index]
-        cap = self.cap[self.cap['ID'].isin(key)][['ID', '시가총액']].copy().set_index(keys='ID')
+        if self._marketcap_.empty:
+            from_date = (today - timedelta(365 * 7)).strftime("%Y%m%d")
+            to_date = today.strftime("%Y%m%d")
+            self._marketcap_ = stock.get_market_cap_by_date(
+                fromdate=from_date, todate=to_date, ticker=self.ticker, freq='m'
+            )
+            self._marketcap_['ID'] = [date.strftime("%Y/%m") for date in self._marketcap_.index]
+            self._marketcap_['시가총액'] = (self._marketcap_['시가총액'] / 100000000).astype(int)
+        cap = self._marketcap_[self._marketcap_['ID'].isin(key)][['ID', '시가총액']].copy().set_index(keys='ID')
         df_copy = df_copy.join(cap, how='left')
         df_copy['PSR'] = round(df_copy['시가총액'] / df_copy[df_copy.columns[0]], 2)
         peg = (df_copy['PER'] / (100*df_copy['EPS(원)'].pct_change())).values
