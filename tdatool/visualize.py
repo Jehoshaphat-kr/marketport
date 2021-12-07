@@ -73,16 +73,17 @@ def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
     require = ['상한선', '기준선', '하한선']
     columns = df.columns.values
     if not len([x for x in require if x in columns]) == len(require):
-        raise KeyError(f'argument not sufficient for price data')
+        raise KeyError(f'argument not sufficient for bollinger-band data')
 
     objects = dict()
+    meta = reform(span=df.index)
     for n, col in enumerate(['상한선', '기준선', '하한선']):
         objects[col] = go.Scatter(
             name='볼린저밴드', x=df.index, y=df[col],
-            mode='lines', line=dict(width=0.5, color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
+            mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
             visible='legendonly', showlegend=False if n else True,
             legendgroup='볼린저밴드',
-            meta=reform(span=df.index),
+            meta=meta,
             hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:,d}원<extra></extra>',
         )
     for n, col in enumerate(['상한지시', '하한지시']):
@@ -94,7 +95,14 @@ def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
             legendgroup='볼린저밴드',
             hoverinfo='skip'
         )
-
+    for col in ['밴드폭', '신호']:
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            visible=True, showlegend=True,
+            legendgroup='볼린저밴드' if group else None,
+            meta=meta,
+            hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:.2f}<extra></extra>'
+        )
     return objects
 
 class Chart:
@@ -147,7 +155,7 @@ class Chart:
             xaxis_rangeslider=dict(visible=False)
         )
 
-    def show_price(self, show: bool = False, save: bool = False) -> go.Figure:
+    def show_basic(self, show: bool = False, save: bool = False) -> go.Figure:
         """
         주가 기본 분석 차트
         :param show:
@@ -157,9 +165,13 @@ class Chart:
         fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05)
 
         # 주가 차트
-        for obj in obj_price(df=self.obj.price):
+        for key, obj in obj_price(df=self.obj.price).items():
             fig.add_trace(obj, row=1, col=1)
 
+        # 볼린저 밴드 차트
+        for key, obj in obj_bollinger(df=self.obj.bollinger).items():
+            if key in ['상한선', '기준선', '하한선', '상한지시', '하한지시']:
+                fig.add_trace(obj, row=1, col=1)
 
         # 피벗 포인트
         trend = self.obj.trend.copy()
@@ -208,10 +220,6 @@ class Chart:
                 showlegend=False if '저항' in col else True
             ))
 
-        # 볼린저 밴드
-        band = self.obj.bollinger.copy()
-
-
         # 필터선
         guide = self.obj.filters.copy()
         for col in guide.columns:
@@ -252,6 +260,42 @@ class Chart:
             fig.show()
         if save:
             of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-기본차트.html"), auto_open=False)
+        return fig
+
+    def show_bollinger(self, show: bool = False, save: bool = False) -> go.Figure:
+        """
+        볼린저 밴드
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(rows=3, cols=1, row_width=[0.15, 0.15, 0.7], shared_xaxes=True, vertical_spacing=0.05)
+        # 주가 차트
+        for key, obj in obj_price(df=self.obj.price).items():
+            fig.add_trace(obj, row=1, col=1)
+
+        # 볼린저 밴드 차트
+        for key, obj in obj_bollinger(df=self.obj.bollinger).items():
+            if key in ['상한선', '기준선', '하한선', '상한지시', '하한지시']:
+                fig.add_trace(obj, row=1, col=1)
+            elif key == '밴드폭':
+                fig.add_trace(obj, row=2, col=1)
+            elif key == '신호':
+                fig.add_trace(obj, row=3, col=1)
+
+        # 레이아웃
+        layout = self.layout_basic(title='볼린저 밴드 차트', x_title='', y_title='가격(KRW)')
+        layout.update(dict(
+            xaxis2=dict(showgrid=True, gridcolor='lightgrey'),
+            yaxis2=dict(title='밴드폭', showgrid=True, gridcolor='lightgrey', showzeroline=True),
+            xaxis3=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
+            yaxis3=dict(title='매매구간', showgrid=True, gridcolor='lightgrey', showzeroline=True)
+        ))
+        fig.update_layout(layout)
+        if show:
+            fig.show()
+        if save:
+            of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html"), auto_open=False)
         return fig
 
     def show_trend(self, show: bool = False, save: bool = False):

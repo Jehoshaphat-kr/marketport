@@ -4,6 +4,7 @@ import tdatool.frame as frm
 from datetime import timedelta
 from pykrx import stock
 from scipy.signal import butter, filtfilt
+from scipy.stats import linregress
 from ta import add_all_ta_features as lib
 
 class analytic:
@@ -24,7 +25,6 @@ class analytic:
         # Empty Property
         self._filters_ = pd.DataFrame()
         self._guidance_ = pd.DataFrame()
-        self._macd_ = pd.DataFrame()
         self._bend_point_ = pd.DataFrame()
         self._thres_ = pd.DataFrame()
         self._pivot_ = pd.DataFrame()
@@ -108,7 +108,7 @@ class analytic:
                 '밴드폭': self.p_lib.volatility_bbw,
                 '신호': self.p_lib.volatility_bbp
             }, axis=1
-        ).dropna()
+        )
 
     @property
     def macd(self) -> pd.DataFrame:
@@ -156,63 +156,59 @@ class analytic:
         return self._bend_point_
 
     @property
+    def pivot(self) -> pd.DataFrame:
+        """
+        Pivot 지점 데이터프레임임
+       :return:
+        """
+        if self._pivot_.empty:
+            price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
+            span = price.index
+
+            dump, upper = frm.get_extrema(h=price['고가'])
+            upper_index = [span[n] for n in upper]
+            upper_pivot = price[span.isin(upper_index)]['고가']
+
+            lower, dump = frm.get_extrema(h=price['저가'])
+            lower_index = [span[n] for n in lower]
+            lower_pivot = price[span.isin(lower_index)]['저가']
+            self._pivot_ = pd.concat(objs={'고점':upper_pivot, '저점':lower_pivot}, axis=1)
+        return self._pivot_
+
+    @property
     def trend(self) -> pd.DataFrame:
         """
         추세선
         :return:
         """
+        def avg(price:pd.DataFrame, pivot:pd.DataFrame, days_ago:int, label:str) -> pd.Series:
+            prev = price.index[-1] - timedelta(days_ago)
+            base = price[price.index >= prev].copy()
+            base['N'] = np.arange(len(base)) + 1
+
+            y = pivot[pivot.index >= prev]['고점'].dropna()
+            x = base[base.index.isin(y.index)]['N']
+            slope, intercept, r_value, p_value, std_err = linregress(x, y)
+            resist = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균저항선')
+
+            y = pivot[pivot.index >= prev]['저점'].dropna()
+            x = base[base.index.isin(y.index)]['N']
+            slope, intercept, r_value, p_value, std_err = linregress(x, y)
+            support = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균지지선')
+            return pd.concat(objs=[resist, support], axis=1)
+
         if self._trend_.empty:
-            price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
-            span = price.index
-
-            lower, upper = frm.calc_support_resistance(h=price['고가'])
-            upper_pivot, upper_range, upper_trend, upper_window = upper
-
-            lower, upper = frm.calc_support_resistance(h=price['저가'])
-            lower_pivot, lower_range, lower_trend, lower_window = lower
-
-            # Pivot Points
-            data = []
-            for n, date in enumerate(span):
-                if n in upper_pivot and n in lower_pivot:
-                    data.append([date, price['저가'][n], price['고가'][n]])
-                elif n in lower_pivot:
-                    data.append([date, price['저가'][n], np.nan])
-                elif n in upper_pivot:
-                    data.append([date, np.nan, price['고가'][n]])
-            pivot = pd.DataFrame(data=data, columns=['날짜', 'PV-지지', 'PV-저항']).set_index(keys='날짜')
-
-            # Average Trend
-            cols = ['날짜', 'Avg-지지선', 'Avg-저항선']
-            data = [[price.index[0], lower_range[1], upper_range[1]],
-                    [price.index[-1], lower_range[0] * (len(price)-1) + lower_range[1], upper_range[0] * (len(price)-1) + upper_range[1]]]
-            trend_avg = pd.DataFrame(data=data, columns=cols).set_index(keys='날짜')
-
-            # Trend
-            min_h, max_h = min(min(price['저가']), min(price['고가'])), max(max(price['저가']), max(price['고가']))
-            data = []
-            for label, line in [('저항선', upper_trend), ('지지선', lower_trend)]:
-                h = price['저가' if label == '지지선' else '고가']
-                for n, t in enumerate(line[:3]):
-                    point, factor = t
-                    maxx = point[-1] + 1
-                    while maxx < len(price) - 1:
-                        ypred = factor[0] * maxx + factor[1]
-                        if (h[maxx - 1] < ypred < h[maxx] or h[maxx] < ypred < h[maxx - 1] or
-                            ypred > max_h + (max_h - min_h) * 0.1 or ypred < min_h - (max_h - min_h) * 0.1): break
-                        maxx += 1
-                    x_vals = np.array((point[0], maxx))
-                    y_vals = factor[0] * x_vals + factor[1]
-                    x_date = [span[n] for n in x_vals]
-                    data.append(pd.Series(data=y_vals, index=x_date, name=f'{label}{n + 1}'))
-            trend_line = pd.concat(objs=data, axis=1)
-
-            self._trend_ = pd.concat([pivot, trend_avg, trend_line], axis=1)
+            gaps = [('1Y', 365), ('6M', 183), ('3M', 91)]
+            avg_trend = pd.concat(
+                objs = [avg(price=self.price, pivot=self.pivot, days_ago=days, label=label) for label, days in gaps],
+                axis=1
+            )
+            self._trend_ = avg_trend
         return self._trend_
 
 
 if __name__ == "__main__":
-    api = analytic(ticker='005930', src='local')
+    api = analytic(ticker='100090', src='local')
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)
@@ -220,6 +216,5 @@ if __name__ == "__main__":
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
-    print(api.bollinger)
-    # print(api.pivot)
-    # print(api.trend)
+    # print(api.bollinger)
+    print(api.trend)
