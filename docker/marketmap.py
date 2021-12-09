@@ -9,8 +9,6 @@ class frame:
 
     time_span = ['R1D', 'R1W', 'R1M', 'R3M', 'R6M', 'R1Y']
     multiples = ['PER', 'PBR', 'DIV']
-    # url_g = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/group/{}.csv'
-    # url_m = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/market/{}.csv'
     kind = ''
     code = ''
     name = ''
@@ -254,7 +252,8 @@ class frame:
             _returns = __frm__[period].copy()
             _returns.fillna(0, inplace=True)
 
-            sr = pd.cut(_returns, bins=[_returns.min()] + index[period] + [_returns.max()], labels=scale, right=True)
+            mi = _returns.min() if _returns.min() < index[period][0] else _returns.min() - 1
+            sr = pd.cut(_returns, bins=[mi] + index[period] + [_returns.max()], labels=scale, right=True)
             sr.name = "C" + period
             df_color = df_color.join(sr.astype(str), how='left')
         __frm__ = __frm__.join(df_color, how='left')
@@ -387,8 +386,8 @@ if __name__ == "__main__":
     # print(frm.mapframe)
 
     marketmap = map2js(
-        # date=datetime.today()
-        date=datetime(2021, 11, 19)
+        date=datetime.today()
+        # date=datetime(2021, 11, 19)
     )
     marketmap.collect()
     marketmap.convert()
