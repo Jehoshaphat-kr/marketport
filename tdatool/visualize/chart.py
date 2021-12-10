@@ -1,4 +1,5 @@
 import os
+import tdatool as tt
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.offline as of
@@ -15,130 +16,24 @@ colors = [
     '#e377c2',  # raspberry yogurt pink
     '#7f7f7f',  # middle gray
     '#bcbd22',  # curry yellow-green
-    '#17becf'  # blue-teal
+    '#17becf'   # blue-teal
 ]
 
-root = os.path.join(
-    os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'),
-    f'tdat/{datetime.today().strftime("%Y-%m-%d")}'
-)
-if not os.path.isdir(root):
-    os.makedirs(name=root)
-
-
-def reform(span):
+def save_as(fig:go.Figure, filename:str):
     """
-    날짜 형식 변경 (from)datetime --> (to)YY/MM/DD
-    :param span: 날짜 리스트
-    :return:
+    차트 파일 저장
+    :param fig: 차트 요소 
+    :param filename: 저장 파일명
+    :return: 
     """
-    return [f'{d.year}/{d.month}/{d.day}' for d in span]
-
-def obj_price(df:pd.DataFrame) -> dict:
-    """
-    기본 주가 차트 요소
-    :param df: 주가 데이터프레임
-    :return: dict() :: key = ['일봉', '시가', '고가', '저가', '종가']
-    """
-    require = ['시가', '고가', '저가', '종가']
-    columns = df.columns.values
-    if not len([x for x in require if x in columns]) == len(require):
-        raise KeyError(f'argument not sufficient for price data')
-
-    objects = dict()
-    objects['일봉'] = go.Candlestick(
-        name='일봉', x=df.index, open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'],
-        increasing_line=dict(color='red'), decreasing_line=dict(color='royalblue'),
-        visible=True, showlegend=True,
+    root = os.path.join(
+        os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'),
+        f'tdat/{datetime.today().strftime("%Y-%m-%d")}'
     )
-
-    for col in require:
-        objects[col] = go.Scatter(
-            name=col, x=df.index, y=df[col],
-            line=dict(color='grey'),
-            visible='legendonly', showlegend=True,
-            meta=reform(span=df.index),
-            hovertemplate=col + ': %{y:,}원<br>날짜: %{meta}<extra></extra>',
-        )
-    return objects
-
-def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
-    """
-    볼린저밴드 차트 요소
-    :param df: 볼린저밴드 데이터프레임
-    :param group: 범례 그룹 여부
-    :return: dict() :: key = ['상한선', '기준선', '하한선', '상한지시', '하한지시', '밴드폭', '신호']
-    """
-    require = ['상한선', '기준선', '하한선']
-    columns = df.columns.values
-    if not len([x for x in require if x in columns]) == len(require):
-        raise KeyError(f'argument not sufficient for bollinger-band data')
-
-    objects = dict()
-    meta = reform(span=df.index)
-    for n, col in enumerate(['상한선', '기준선', '하한선']):
-        objects[col] = go.Scatter(
-            name='볼린저밴드', x=df.index, y=df[col],
-            mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
-            visible='legendonly', showlegend=False if n else True, legendgroup='볼린저밴드',
-            meta=meta,
-            hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:,d}원<extra></extra>',
-        )
-    for n, col in enumerate(['상한지시', '하한지시']):
-        objects[col] = go.Scatter(
-            name=col, x=df.index, y=df[col],
-            mode='markers', marker=dict(
-                symbol=f'triangle-{"up" if n else "down"}', color='red' if n else 'royalblue', size=9
-            ), visible='legendonly', showlegend=False, legendgroup='볼린저밴드',
-            hoverinfo='skip'
-        )
-    for col in ['밴드폭', '신호']:
-        objects[col] = go.Scatter(
-            name=col, x=df.index, y=df[col],
-            visible=True, showlegend=True, legendgroup='볼린저밴드' if group else None,
-            meta=meta,
-            hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:.2f}<extra></extra>'
-        )
-    return objects
-
-def obj_pivot(df:pd.DataFrame) -> dict:
-    """
-    피벗 지점 차트 요소
-    :param df: 피벗 지점 데이터프레임
-    :return: dict() :: key = [고점, 저점]
-    """
-    objects = {}
-    for n, col in enumerate(df.columns):
-        sr = df[col].dropna()
-        objects[col] = go.Scatter(
-            name=f'피벗포인트', x=sr.index, y=sr,
-            mode='markers', marker=dict(
-                symbol='circle', color='blue' if col == '고점' else 'red', size=8, opacity=0.7
-            ), visible='legendonly', showlegend=True if n else False, legendgroup='pivot',
-            meta=reform(span=sr.index),
-            hovertemplate='날짜: %{meta}<br>' + col + '피벗: %{y:,d}원<extra></extra>'
-        )
-    return objects
-
-def obj_trend(df:pd.DataFrame) -> dict:
-    """
-    직선 추세 차트 요소
-    :param df: 직선 추세 데이터프레임
-    :return: dict() :: key = ['1Y평균저항선', '1Y평균지지선', '6M평균저항선', '6M평균지지선', '3M평균저항선', '3M평균지지선',
-                              '1Y표준저항선', '1Y표준지지선', '6M표준저항선', '6M표준지지선', '3M표준저항선', '3M표준지지선']
-    """
-    meta = reform(span=df.index)
-    objects = {}
-    for n, col in enumerate(df.columns):
-        key = f"{col[:4]}추세"
-        objects[col] = go.Scatter(
-            name=key, x=df.index, y=df[col],
-            mode='lines', line=dict(color='royalblue' if col.endswith('저항선') else 'red'),
-            visible='legendonly', showlegend=False if col.endswith('지지선') else True, legendgroup=key,
-            meta=meta,
-            hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,d}원<extra></extra>'
-        )
-    return objects
+    if not os.path.isdir(root):
+        os.makedirs(name=root)
+    of.plot(fig, filename=os.path.join(root, filename), auto_open=False)
+    return
 
 class Chart:
     def __init__(self, obj):
@@ -159,24 +54,16 @@ class Chart:
             annotations=[
                 dict(
                     text="TDAT 내일모레, the-day-after-tomorrow.tistory.com",
-                    showarrow=False,
-                    xref="paper", yref="paper",
-                    x=0.005, y=-0.002
+                    showarrow=False, xref="paper", yref="paper", x=0.005, y=-0.002
                 )
             ],
-            # legend=dict(traceorder='reversed'),
             yaxis=dict(
                 title=f'{y_title}',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=False,
-                showticklabels=True, autorange=True,
+                showgrid=True, gridcolor='lightgrey', showticklabels=True, zeroline=False, autorange=True,
             ),
             xaxis=dict(
                 title=f'{x_title}',
-                showgrid=True, gridcolor='lightgrey',
-                zeroline=False,
-                showticklabels=True, autorange=True,
-                rangeselector=dict(
+                showgrid=True, gridcolor='lightgrey', showticklabels=True, zeroline=False, autorange=True,rangeselector=dict(
                     buttons=list([
                         dict(count=1, label="1m", step="month", stepmode="backward"),
                         dict(count=3, label="3m", step="month", stepmode="backward"),
@@ -200,50 +87,30 @@ class Chart:
         fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05)
 
         # 주가 차트
-        for key, obj in obj_price(df=self.obj.price).items():
+        for key, obj in tt.price(df=self.obj.price):
             fig.add_trace(obj, row=1, col=1)
 
         # 볼린저 밴드
-        for key, obj in obj_bollinger(df=self.obj.bollinger).items():
-            if key in ['상한선', '기준선', '하한선', '상한지시', '하한지시']:
+        for key, obj in tt.bollinger(df=self.obj.bollinger):
+            if key in ['상한선', '기준선', '하한선']:
                 fig.add_trace(obj, row=1, col=1)
 
         # 피벗 포인트
-        for key, obj in obj_pivot(df=self.obj.pivot).items():
+        for key, obj in tt.pivot(df=self.obj.pivot):
             fig.add_trace(obj, row=1, col=1)
 
-        # 평균 추세선
-        for key, obj in obj_trend(df=self.obj.avg_trend).items():
+        # 추세선
+        for key, obj in tt.trend(df=self.obj.trend):
             fig.add_trace(obj, row=1, col=1)
 
         # 필터선
-        guide = self.obj.filters.copy()
-        for col in guide.columns:
-            if col.startswith('EMA') or col.startswith('IIR'):
-                continue
-            fig.add_trace(go.Scatter(
-                x=guide.index,
-                y=guide[col],
-                name=col,
-                legendgroup=col,
-                visible='legendonly',
-                meta=reform(span=guide.index),
-                hovertemplate=col + '<br>값: %{y:.2f}<br>날짜: %{meta}<extra></extra>',
-            ))
+        for key, obj in tt.filters(df=self.obj.filters):
+            if key.startswith('SMA'):
+                fig.add_trace(obj, row=1, col=1)
 
         # 거래량
-        volume = self.obj.price['거래량']
-        fig.add_trace(go.Bar(
-            x=volume.index,
-            y=volume.values,
-            customdata=reform(span=self.obj.price.index),
-            name='거래량',
-            marker=dict(
-                color=['blue' if d < 0 else 'red' for d in volume.pct_change().fillna(1)]
-            ),
-            showlegend=False,
-            hovertemplate='날짜:%{customdata}<br>거래량:%{y:,}<extra></extra>'
-        ), row=2, col=1)
+        for key, obj in tt.volume(df=self.obj.price, is_main=False):
+            fig.add_trace(obj, row=2, col=1)
 
         layout = self.layout_basic(title='기본 분석 차트', x_title='', y_title='가격(KRW)')
         layout.update(dict(
@@ -255,7 +122,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-기본차트.html"), auto_open=False)
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-기본차트.html")
         return fig
 
     def show_bollinger(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -267,20 +134,19 @@ class Chart:
         """
         fig = make_subplots(rows=3, cols=1, row_width=[0.15, 0.15, 0.7], shared_xaxes=True, vertical_spacing=0.05)
         # 주가 차트
-        for key, obj in obj_price(df=self.obj.price).items():
+        for key, obj in tt.price(df=self.obj.price):
             fig.add_trace(obj, row=1, col=1)
 
         # 볼린저 밴드 차트
-        for key, obj in obj_bollinger(df=self.obj.bollinger).items():
+        for key, obj in tt.bollinger(df=self.obj.bollinger):
             if key in ['상한선', '기준선', '하한선', '상한지시', '하한지시']:
                 fig.add_trace(obj, row=1, col=1)
-            elif key == '밴드폭':
-                fig.add_trace(obj, row=2, col=1)
             elif key == '신호':
+                fig.add_trace(obj, row=2, col=1)
+            elif key == '밴드폭':
                 fig.add_trace(obj, row=3, col=1)
-        fig.add_hline(y=1, row=3, col=1, line=dict(dash='dot', width=0.5, color='black'))
-        fig.add_hline(y=0, row=3, col=1, line=dict(dash='dot', width=0.5, color='black'))
-
+        fig.add_hline(y=1, row=2, col=1, line=dict(dash='dot', width=0.5, color='black'))
+        fig.add_hline(y=0, row=2, col=1, line=dict(dash='dot', width=0.5, color='black'))
 
         # 레이아웃
         layout = self.layout_basic(title='볼린저 밴드 차트', x_title='', y_title='가격(KRW)')
@@ -294,122 +160,162 @@ class Chart:
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html"), auto_open=False)
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html")
         return fig
 
-    def show_trend(self, show: bool = False, save: bool = False):
+    def show_rsi(self, show: bool = False, save: bool = False) -> go.Figure:
         """
-        추세선 및 MACD
+        상대 강도 차트
         :param show:
         :param save:
         :return:
         """
-        fig = make_subplots(rows=2, cols=1, row_width=[0.2, 0.8], shared_xaxes=True, vertical_spacing=0.05,
-                            specs=[[{"secondary_y": True}], [{"secondary_y": True}]])
+        fig = make_subplots(rows=3, cols=1, row_width=[0.15, 0.15, 0.7], shared_xaxes=True, vertical_spacing=0.05)
 
-        # 종가 정보
-        price = self.obj.price['종가']
-        tic = price.index[0]
-        toc = price.index[-1]
-        fig.add_trace(go.Scatter(
-            x=price.index,
-            y=price,
-            meta=reform(span=price.index),
-            name='종가',
-            hovertemplate='날짜: %{meta}<br>종가: %{y:,}원<extra></extra>'
-        ), row=1, col=1, secondary_y=False)
+        # 주가 차트
+        for key, obj in tt.price(df=self.obj.price):
+            fig.add_trace(obj, row=1, col=1)
 
-        # 추세선
-        point = self.obj.bend_point.copy()
-        trend = self.obj.guidance.copy()
-        for col in trend.columns:
-            if col.startswith('d'):
-                continue
-            fig.add_trace(go.Scatter(
-                x=trend.index,
-                y=trend[col],
-                customdata=reform(span=trend.index),
-                legendgroup=col,
-                name=col,
-                mode='lines',
-                showlegend=True,
-                visible='legendonly',
-                hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
-            ), row=1, col=1, secondary_y=True)
+        # RSI 차트
+        for key, obj in tt.rsi(df=self.obj.rsi):
+            if key == 'RSI':
+                fig.add_trace(obj, row=2, col=1)
+            elif key.startswith('STOCH'):
+                fig.add_trace(obj, row=3, col=1)
+            else:
+                fig.add_trace(obj, row=3, col=1)
+        fig.add_hline(y=70, row=2, col=1, line=dict(dash='dot', width=0.5, color='black'))
+        fig.add_hline(y=30, row=2, col=1, line=dict(dash='dot', width=0.5, color='black'))
 
-            pick = point[f'det{col}'].dropna()
-            fig.add_trace(go.Scatter(
-                x=pick.index,
-                y=pick['value'],
-                mode='markers',
-                text=pick['bs'],
-                meta=reform(pick.index),
-                legendgroup=col,
-                showlegend=False,
-                marker=dict(
-                    color=pick['color'],
-                    symbol=pick['symbol']
-                ),
-                visible='legendonly',
-                hovertemplate='%{text}<br>날짜: %{meta}<br>값: %{y}<extra></extra>'
-            ), row=1, col=1, secondary_y=True)
-
-        # MACD
-        data = self.obj.macd
-        form = reform(span=data.index)
-        for n, col in enumerate(['MACD', 'MACD-Sig']):
-            fig.add_trace(go.Scatter(
-                x=data.index,
-                y=data[col],
-                name=col,
-                meta=form,
-                legendgroup='macd',
-                showlegend=True if not n else False,
-                hovertemplate=col + '<br>날짜: %{meta}<extra></extra>'
-            ), row=2, col=1, secondary_y=False)
-
-        fig.add_trace(go.Bar(
-            x=data.index,
-            y=data['MACD-Hist'],
-            meta=form,
-            name='MACD-Hist',
-            marker=dict(
-                color=['blue' if v < 0 else 'red' for v in data['MACD-Hist'].values]
-            ),
-            showlegend=False,
-            hovertemplate='날짜:%{meta}<br>히스토그램:%{y:.2f}<extra></extra>'
-        ), row=2, col=1, secondary_y=True)
-
-        pick = point['detMACD'].dropna()
-        fig.add_trace(go.Scatter(
-            x=pick.index,
-            y=pick['value'],
-            mode='markers',
-            marker=dict(
-                symbol=pick['symbol'],
-                color=pick['color'],
-            ),
-            text=pick['bs'],
-            meta=reform(span=pick.index),
-            hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>',
-            legendgroup='macd',
-            showlegend=False
-        ), row=2, col=1)
-
-        layout = self.layout_basic(title='추세 분석 차트', x_title='', y_title='종가[KRW]')
+        # 레이아웃
+        layout = self.layout_basic(title='RSI(상대 강세) 차트', x_title='', y_title='가격(KRW)')
         layout.update(dict(
-            xaxis=dict(range=[tic, toc]),
-            xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
-            yaxis2=dict(title='추세', showgrid=False, zeroline=True, zerolinecolor='grey', zerolinewidth=2),
-            yaxis3=dict(title='MACD', showgrid=True, gridcolor='lightgrey')
+            xaxis2=dict(showgrid=True, gridcolor='lightgrey'),
+            yaxis2=dict(title='RSI', showgrid=True, gridcolor='lightgrey', zeroline=True),
+            xaxis3=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
+            yaxis3=dict(title='STOCH-RSI', showgrid=True, gridcolor='lightgrey', zeroline=True)
         ))
         fig.update_layout(layout)
 
         if show:
             fig.show()
         if save:
-            of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-추세차트.html"), auto_open=False)
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-RSI.html")
         return fig
+
+    # def show_trend(self, show: bool = False, save: bool = False):
+    #     """
+    #     추세선 및 MACD
+    #     :param show:
+    #     :param save:
+    #     :return:
+    #     """
+    #     fig = make_subplots(rows=2, cols=1, row_width=[0.2, 0.8], shared_xaxes=True, vertical_spacing=0.05,
+    #                         specs=[[{"secondary_y": True}], [{"secondary_y": True}]])
+    #
+    #     # 종가 정보
+    #     price = self.obj.price['종가']
+    #     tic = price.index[0]
+    #     toc = price.index[-1]
+    #     fig.add_trace(go.Scatter(
+    #         x=price.index,
+    #         y=price,
+    #         meta=reform(span=price.index),
+    #         name='종가',
+    #         hovertemplate='날짜: %{meta}<br>종가: %{y:,}원<extra></extra>'
+    #     ), row=1, col=1, secondary_y=False)
+    #
+    #     # 추세선
+    #     point = self.obj.bend_point.copy()
+    #     trend = self.obj.guidance.copy()
+    #     for col in trend.columns:
+    #         if col.startswith('d'):
+    #             continue
+    #         fig.add_trace(go.Scatter(
+    #             x=trend.index,
+    #             y=trend[col],
+    #             customdata=reform(span=trend.index),
+    #             legendgroup=col,
+    #             name=col,
+    #             mode='lines',
+    #             showlegend=True,
+    #             visible='legendonly',
+    #             hovertemplate=col + '<br>추세:%{y:.3f}<br>날짜:%{customdata}<br><extra></extra>',
+    #         ), row=1, col=1, secondary_y=True)
+    #
+    #         pick = point[f'det{col}'].dropna()
+    #         fig.add_trace(go.Scatter(
+    #             x=pick.index,
+    #             y=pick['value'],
+    #             mode='markers',
+    #             text=pick['bs'],
+    #             meta=reform(pick.index),
+    #             legendgroup=col,
+    #             showlegend=False,
+    #             marker=dict(
+    #                 color=pick['color'],
+    #                 symbol=pick['symbol']
+    #             ),
+    #             visible='legendonly',
+    #             hovertemplate='%{text}<br>날짜: %{meta}<br>값: %{y}<extra></extra>'
+    #         ), row=1, col=1, secondary_y=True)
+    #
+    #     # MACD
+    #     data = self.obj.macd
+    #     form = reform(span=data.index)
+    #     for n, col in enumerate(['MACD', 'MACD-Sig']):
+    #         fig.add_trace(go.Scatter(
+    #             x=data.index,
+    #             y=data[col],
+    #             name=col,
+    #             meta=form,
+    #             legendgroup='macd',
+    #             showlegend=True if not n else False,
+    #             hovertemplate=col + '<br>날짜: %{meta}<extra></extra>'
+    #         ), row=2, col=1, secondary_y=False)
+    #
+    #     fig.add_trace(go.Bar(
+    #         x=data.index,
+    #         y=data['MACD-Hist'],
+    #         meta=form,
+    #         name='MACD-Hist',
+    #         marker=dict(
+    #             color=['blue' if v < 0 else 'red' for v in data['MACD-Hist'].values]
+    #         ),
+    #         showlegend=False,
+    #         hovertemplate='날짜:%{meta}<br>히스토그램:%{y:.2f}<extra></extra>'
+    #     ), row=2, col=1, secondary_y=True)
+    #
+    #     pick = point['detMACD'].dropna()
+    #     fig.add_trace(go.Scatter(
+    #         x=pick.index,
+    #         y=pick['value'],
+    #         mode='markers',
+    #         marker=dict(
+    #             symbol=pick['symbol'],
+    #             color=pick['color'],
+    #         ),
+    #         text=pick['bs'],
+    #         meta=reform(span=pick.index),
+    #         hovertemplate='%{text}<br>날짜: %{meta}<extra></extra>',
+    #         legendgroup='macd',
+    #         showlegend=False
+    #     ), row=2, col=1)
+    #
+    #     layout = self.layout_basic(title='추세 분석 차트', x_title='', y_title='종가[KRW]')
+    #     layout.update(dict(
+    #         xaxis=dict(range=[tic, toc]),
+    #         xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
+    #         yaxis2=dict(title='추세', showgrid=False, zeroline=True, zerolinecolor='grey', zerolinewidth=2),
+    #         yaxis3=dict(title='MACD', showgrid=True, gridcolor='lightgrey')
+    #     ))
+    #     fig.update_layout(layout)
+    #
+    #     if show:
+    #         fig.show()
+    #     if save:
+    #         of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-추세차트.html"), auto_open=False)
+    #     return fig
 
 
 # class Fundamental(fundamental):

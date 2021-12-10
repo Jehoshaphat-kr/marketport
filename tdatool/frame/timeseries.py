@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import numpy as np
 import tdatool.frame as frm
@@ -31,7 +32,6 @@ class analytic:
         self._guidance_ = pd.DataFrame()
         self._bend_point_ = pd.DataFrame()
         self._pivot_ = pd.DataFrame()
-        self._avg_trend_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         return
 
@@ -117,7 +117,7 @@ class analytic:
     @property
     def macd(self) -> pd.DataFrame:
         """
-        MACD 데이터프레임
+        MACD: Moving Average Convergence & Divergence 데이터프레임
         :return:
         """
         return pd.concat(
@@ -127,6 +127,51 @@ class analytic:
                 'MACD-Hist':self.p_lib.trend_macd_diff
             }, axis=1
         )
+
+    @property
+    def stc(self) -> pd.DataFrame:
+        """
+        STC: Schaff Trend Cycle 데이터프레임
+        :return:
+        """
+        return self.p_lib.trend_stc
+
+    @property
+    def cci(self) -> pd.DataFrame:
+        """
+        CCI: Commodity Channel Index 데이터프레임
+        :return:
+        """
+        return self.p_lib.trend_cci
+
+    @property
+    def trix(self) -> pd.DataFrame:
+        """
+        TRIX:
+        :return:
+        """
+        return pd.concat(
+            objs={
+                'TRIX':self.p_lib.trend_trix,
+                'TRIX-Sig':self.p_lib.trend_macd_signal,
+            }, axis=1
+        )
+
+    @property
+    def rsi(self) -> pd.DataFrame:
+        """
+        RSI: Relative Strength Index 데이터프레임
+        RSI, Stoch-RSI
+        :return:
+        """
+        return pd.concat(
+            objs={
+                'RSI': self.p_lib.momentum_rsi,
+                'STOCH-RSI': self.p_lib.momentum_stoch,
+                'STOCH-RSI-Sig': self.p_lib.momentum_stoch_signal
+            }, axis=1
+        )
+
 
     @property
     def bend_point(self) -> pd.DataFrame:
@@ -180,90 +225,81 @@ class analytic:
         return self._pivot_
 
     @property
-    def avg_trend(self) -> pd.DataFrame:
+    def trend(self) -> pd.DataFrame:
         """
         평균 추세선
         :return:
         """
-        def norm(frm:pd.DataFrame, label:str, kind:str) -> pd.DataFrame:
-            # on = price.index[-1] - timedelta(days_ago)
-            # base = price[price.index >= on].copy()
-            # base['N'] = np.arange(len(base)) + 1
+        def norm(frm:pd.DataFrame, period:str, kind:str) -> pd.Series:
+            """
+            :param frm: 기간 별 slice 가격 및 정수 index N 포함 데이터프레임
+            :param period: '1Y', '6M', '3M'
+            :param kind: '지지선', '저항선'
+            :return:
+            """
             is_resist = True if kind == '저항선' else False
-            base = frm[kind]
-            tip_index = base[base == base.max() if is_resist else base.min()].index[0]
+            key = '고가' if is_resist else '저가'
+            base = frm[key]
+            tip_index = base[base == (base.max() if is_resist else base.min())].index[-1]
             right = base[base.index > tip_index].drop_duplicates(keep='last').sort_values(ascending=not is_resist)
             left = base[base.index < tip_index].drop_duplicates(keep='first').sort_values(ascending=not is_resist)
 
-            right_trend = pd.Series()
-            left_trend = pd.Series()
+            r_trend = pd.DataFrame()
+            l_trend = pd.DataFrame()
             for n, sr in enumerate([right, left]):
                 prev_len = len(frm)
                 for index in sr.index:
-                    sample = frm[frm.index.isin([index, tip_index])][['N', kind]]
-                    slope, intercept, r_value, p_value, std_err = linregress(sample['N'], sample[kind])
-                    curr_len = len(frm[frm['고가'] >= slope * frm['N'] + intercept])
+                    sample = frm[frm.index.isin([index, tip_index])][['N', key]]
+                    slope, intercept, r_value, p_value, std_err = linregress(sample['N'], sample[key])
+                    regress = slope * frm['N'] + intercept
+
+                    curr_len = len(frm[frm[key] >= regress]) if is_resist else len(frm[frm[key] <= regress])
                     if curr_len > prev_len: continue
 
-                    if n: left_trend = slope * base['N'] + intercept
-                    else: right_trend = slope * base['N'] + intercept
+                    if n: l_trend = slope * frm['N'] + intercept
+                    else: r_trend = slope * frm['N'] + intercept
 
                     if curr_len <= 3: break
                     else: prev_len = curr_len
+            if r_trend.empty:
+                series = l_trend
+            elif l_trend.empty:
+                series = r_trend
+            else:
+                r_e = math.sqrt((r_trend - frm[key]).pow(2).sum())
+                l_e = math.sqrt((l_trend - frm[key]).pow(2).sum())
+                series = r_trend if r_e < l_e else l_trend
+            series.name = f'{period}표준{kind}'
+            return series
 
-
-
-        def avg(price:pd.DataFrame, pivot:pd.DataFrame, days_ago:int, label:str) -> pd.Series:
-            prev = price.index[-1] - timedelta(days_ago)
-            base = price[price.index >= prev].copy()
-            base['N'] = np.arange(len(base)) + 1
-
-            y = pivot[pivot.index >= prev]['고점'].dropna()
-            x = base[base.index.isin(y.index)]['N']
+        def mean(frm_price:pd.DataFrame, frm_pivot:pd.DataFrame, period:str, kind:str) -> pd.Series:
+            is_resist = True if kind == '저항선' else False
+            key = '고점' if is_resist else '저점'
+            y = frm_pivot[key].dropna()
+            x = frm_price[frm_price.index.isin(y.index)]['N']
             slope, intercept, r_value, p_value, std_err = linregress(x, y)
-            avg_r = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균저항선')
+            series = slope * frm_price['N'] + intercept
+            series.name = f'{period}평균{kind}'
+            return series
 
-            sr = base['고가']
-            p_index = sr[sr == sr.max()].drop_duplicates(keep='first').copy().index[0]
-            p_thres = days_ago
-            for point in sr[sr.index > p_index].drop_duplicates(keep='last').sort_values(ascending=False):
-                _index = sr[sr == point].index[-1]
-                sample = base[base.index.isin([p_index, _index])][['N', '고가']]
-                slope, intercept, r_value, p_value, std_err = linregress(sample.N, sample.고가)
-                threshold = len(base[base.고가 >= slope * base['N'] + intercept])
-                if threshold > p_thres: continue
-
-                base[f'{label}표준저항선'] = slope * base['N'] + intercept
-                p_thres = threshold
-                if threshold <= 3: break
-
-            y = pivot[pivot.index >= prev]['저점'].dropna()
-            x = base[base.index.isin(y.index)]['N']
-            slope, intercept, r_value, p_value, std_err = linregress(x, y)
-            avg_s = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균지지선')
-
-            p_index = y[y == y.min()].drop_duplicates(keep='first').index[0]
-            for point in y[y.index > p_index].drop_duplicates(keep='last').values:
-                _index = y[y == point].index[0]
-                sample = base[base.index.isin([p_index, _index])][['N', '저가']]
-                slope, intercept, r_value, p_value, std_err = linregress(sample.N, sample.저가)
-                base[f'{label}표준지지선'] = slope * base['N'] + intercept
-                if len(base[base.저가 <= base[f'{label}표준지지선']]) <= 2:
-                    break
-            return pd.concat(objs=[avg_r, avg_s, base[f'{label}표준저항선'], base[f'{label}표준지지선']], axis=1)
-
-        if self._avg_trend_.empty:
+        if self._trend_.empty:
+            objs = []
             gaps = [('1Y', 365), ('6M', 183), ('3M', 91)]
-            avg_trend = pd.concat(
-                objs = [avg(price=self.price, pivot=self.pivot, days_ago=days, label=label) for label, days in gaps],
-                axis=1
-            )
-            self._avg_trend_ = avg_trend
-        return self._avg_trend_
+            for period, days in gaps:
+                on = self.price.index[-1] - timedelta(days)
+                frm_price = self.price[self.price.index >= on].copy()
+                frm_price['N'] = np.arange(len(frm_price)) + 1
+                frm_pivot = self.pivot[self.pivot.index >= on]
+                objs.append(mean(frm_price=frm_price, frm_pivot=frm_pivot, period=period, kind='저항선'))
+                objs.append(mean(frm_price=frm_price, frm_pivot=frm_pivot, period=period, kind='지지선'))
+                objs.append(norm(frm=frm_price, period=period, kind='저항선'))
+                objs.append(norm(frm=frm_price, period=period, kind='지지선'))
+            self._trend_ = pd.concat(objs=objs, axis=1)
+        return self._trend_
 
 
 if __name__ == "__main__":
-    api = analytic(ticker='005930', src='local')
+    api = analytic(ticker='006400', src='local')
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)
@@ -273,4 +309,4 @@ if __name__ == "__main__":
     # print(api.h_sup_res)
     # print(api.bollinger)
     # print(api.pivot)
-    print(api.avg_trend)
+    print(api.trend)
