@@ -47,8 +47,7 @@ def obj_price(df:pd.DataFrame) -> dict:
 
     objects = dict()
     objects['일봉'] = go.Candlestick(
-        name='일봉', x=df.index,
-        open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'],
+        name='일봉', x=df.index, open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가'],
         increasing_line=dict(color='red'), decreasing_line=dict(color='royalblue'),
         visible=True, showlegend=True,
     )
@@ -81,8 +80,7 @@ def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
         objects[col] = go.Scatter(
             name='볼린저밴드', x=df.index, y=df[col],
             mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
-            visible='legendonly', showlegend=False if n else True,
-            legendgroup='볼린저밴드',
+            visible='legendonly', showlegend=False if n else True, legendgroup='볼린저밴드',
             meta=meta,
             hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:,d}원<extra></extra>',
         )
@@ -91,15 +89,13 @@ def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
             name=col, x=df.index, y=df[col],
             mode='markers', marker=dict(
                 symbol=f'triangle-{"up" if n else "down"}', color='red' if n else 'royalblue', size=9
-            ), visible='legendonly', showlegend=False,
-            legendgroup='볼린저밴드',
+            ), visible='legendonly', showlegend=False, legendgroup='볼린저밴드',
             hoverinfo='skip'
         )
     for col in ['밴드폭', '신호']:
         objects[col] = go.Scatter(
             name=col, x=df.index, y=df[col],
-            visible=True, showlegend=True,
-            legendgroup='볼린저밴드' if group else None,
+            visible=True, showlegend=True, legendgroup='볼린저밴드' if group else None,
             meta=meta,
             hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:.2f}<extra></extra>'
         )
@@ -118,8 +114,7 @@ def obj_pivot(df:pd.DataFrame) -> dict:
             name=f'피벗포인트', x=sr.index, y=sr,
             mode='markers', marker=dict(
                 symbol='circle', color='blue' if col == '고점' else 'red', size=8, opacity=0.7
-            ), visible='legendonly', showlegend=True if n else False,
-            legendgroup='pivot',
+            ), visible='legendonly', showlegend=True if n else False, legendgroup='pivot',
             meta=reform(span=sr.index),
             hovertemplate='날짜: %{meta}<br>' + col + '피벗: %{y:,d}원<extra></extra>'
         )
@@ -130,17 +125,16 @@ def obj_trend(df:pd.DataFrame) -> dict:
     직선 추세 차트 요소
     :param df: 직선 추세 데이터프레임
     :return: dict() :: key = ['1Y평균저항선', '1Y평균지지선', '6M평균저항선', '6M평균지지선', '3M평균저항선', '3M평균지지선',
-                              '1Y', '6M', '3M']
+                              '1Y표준저항선', '1Y표준지지선', '6M표준저항선', '6M표준지지선', '3M표준저항선', '3M표준지지선']
     """
     meta = reform(span=df.index)
     objects = {}
     for n, col in enumerate(df.columns):
-        key = f"{col[:4] if '평균' in col else col[:2]}추세"
+        key = f"{col[:4]}추세"
         objects[col] = go.Scatter(
             name=key, x=df.index, y=df[col],
             mode='lines', line=dict(color='royalblue' if col.endswith('저항선') else 'red'),
-            visible='legendonly', showlegend=False if col.endswith('지지선') else True,
-            legendgroup=key,
+            visible='legendonly', showlegend=False if col.endswith('지지선') else True, legendgroup=key,
             meta=meta,
             hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,d}원<extra></extra>'
         )

@@ -185,6 +185,34 @@ class analytic:
         평균 추세선
         :return:
         """
+        def norm(frm:pd.DataFrame, label:str, kind:str) -> pd.DataFrame:
+            # on = price.index[-1] - timedelta(days_ago)
+            # base = price[price.index >= on].copy()
+            # base['N'] = np.arange(len(base)) + 1
+            is_resist = True if kind == '저항선' else False
+            base = frm[kind]
+            tip_index = base[base == base.max() if is_resist else base.min()].index[0]
+            right = base[base.index > tip_index].drop_duplicates(keep='last').sort_values(ascending=not is_resist)
+            left = base[base.index < tip_index].drop_duplicates(keep='first').sort_values(ascending=not is_resist)
+
+            right_trend = pd.Series()
+            left_trend = pd.Series()
+            for n, sr in enumerate([right, left]):
+                prev_len = len(frm)
+                for index in sr.index:
+                    sample = frm[frm.index.isin([index, tip_index])][['N', kind]]
+                    slope, intercept, r_value, p_value, std_err = linregress(sample['N'], sample[kind])
+                    curr_len = len(frm[frm['고가'] >= slope * frm['N'] + intercept])
+                    if curr_len > prev_len: continue
+
+                    if n: left_trend = slope * base['N'] + intercept
+                    else: right_trend = slope * base['N'] + intercept
+
+                    if curr_len <= 3: break
+                    else: prev_len = curr_len
+
+
+
         def avg(price:pd.DataFrame, pivot:pd.DataFrame, days_ago:int, label:str) -> pd.Series:
             prev = price.index[-1] - timedelta(days_ago)
             base = price[price.index >= prev].copy()
@@ -193,13 +221,36 @@ class analytic:
             y = pivot[pivot.index >= prev]['고점'].dropna()
             x = base[base.index.isin(y.index)]['N']
             slope, intercept, r_value, p_value, std_err = linregress(x, y)
-            resist = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균저항선')
+            avg_r = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균저항선')
+
+            sr = base['고가']
+            p_index = sr[sr == sr.max()].drop_duplicates(keep='first').copy().index[0]
+            p_thres = days_ago
+            for point in sr[sr.index > p_index].drop_duplicates(keep='last').sort_values(ascending=False):
+                _index = sr[sr == point].index[-1]
+                sample = base[base.index.isin([p_index, _index])][['N', '고가']]
+                slope, intercept, r_value, p_value, std_err = linregress(sample.N, sample.고가)
+                threshold = len(base[base.고가 >= slope * base['N'] + intercept])
+                if threshold > p_thres: continue
+
+                base[f'{label}표준저항선'] = slope * base['N'] + intercept
+                p_thres = threshold
+                if threshold <= 3: break
 
             y = pivot[pivot.index >= prev]['저점'].dropna()
             x = base[base.index.isin(y.index)]['N']
             slope, intercept, r_value, p_value, std_err = linregress(x, y)
-            support = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균지지선')
-            return pd.concat(objs=[resist, support], axis=1)
+            avg_s = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균지지선')
+
+            p_index = y[y == y.min()].drop_duplicates(keep='first').index[0]
+            for point in y[y.index > p_index].drop_duplicates(keep='last').values:
+                _index = y[y == point].index[0]
+                sample = base[base.index.isin([p_index, _index])][['N', '저가']]
+                slope, intercept, r_value, p_value, std_err = linregress(sample.N, sample.저가)
+                base[f'{label}표준지지선'] = slope * base['N'] + intercept
+                if len(base[base.저가 <= base[f'{label}표준지지선']]) <= 2:
+                    break
+            return pd.concat(objs=[avg_r, avg_s, base[f'{label}표준저항선'], base[f'{label}표준지지선']], axis=1)
 
         if self._avg_trend_.empty:
             gaps = [('1Y', 365), ('6M', 183), ('3M', 91)]
@@ -210,39 +261,9 @@ class analytic:
             self._avg_trend_ = avg_trend
         return self._avg_trend_
 
-    @property
-    def trend(self) -> pd.DataFrame:
-        if self._trend_.empty:
-            ago = self.price.index[-1] - timedelta(365)
-            base = self.price[self.price.index >= ago].copy()
-            base['N'] = np.arange(len(base)) + 1
-            base = base.join(self.pivot, how='left')
-
-            y = base['고점'].dropna()
-            x = base[base.index.isin(y.index)]['N']
-            slope, intercept, r_value, p_value, std_err = linregress(x, y)
-            print(slope, intercept)
-            base['저항선'] = slope * base['N'] + intercept
-            # line = pd.Series(data=(slope * base['N'] + intercept).values, index=base['N'])
-            print(base['저항선'])
-            while len(base['저항선'].dropna()) > 3:
-                base['저항선'] = base.loc[base['고가'] > slope * base['N'] + intercept]['저항선']
-                # print(base['저항선'])
-                y = base['고점'].dropna()
-                x = base[base.index.isin(y.index)]['N']
-                slope, intercept, r_value, p_value, std_err = linregress(x, y)
-                base['저항선'] = slope * base['N'] + intercept
-                # slope, intercept, r_value, p_value, std_err = linregress(x=base['N'], y=base['저항선'])
-                print(slope, intercept)
-
-
-            # print(base['저항선'])
-        #     print(line)
-        # return self._trend_
-
 
 if __name__ == "__main__":
-    api = analytic(ticker='100090', src='local')
+    api = analytic(ticker='005930', src='local')
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)
@@ -252,5 +273,4 @@ if __name__ == "__main__":
     # print(api.h_sup_res)
     # print(api.bollinger)
     # print(api.pivot)
-    # print(api.avg_trend)
-    print(api.trend)
+    print(api.avg_trend)
