@@ -105,6 +105,47 @@ def obj_bollinger(df:pd.DataFrame, group:bool=False) -> dict:
         )
     return objects
 
+def obj_pivot(df:pd.DataFrame) -> dict:
+    """
+    피벗 지점 차트 요소
+    :param df: 피벗 지점 데이터프레임
+    :return: dict() :: key = [고점, 저점]
+    """
+    objects = {}
+    for n, col in enumerate(df.columns):
+        sr = df[col].dropna()
+        objects[col] = go.Scatter(
+            name=f'피벗포인트', x=sr.index, y=sr,
+            mode='markers', marker=dict(
+                symbol='circle', color='blue' if col == '고점' else 'red', size=8, opacity=0.7
+            ), visible='legendonly', showlegend=True if n else False,
+            legendgroup='pivot',
+            meta=reform(span=sr.index),
+            hovertemplate='날짜: %{meta}<br>' + col + '피벗: %{y:,d}원<extra></extra>'
+        )
+    return objects
+
+def obj_trend(df:pd.DataFrame) -> dict:
+    """
+    직선 추세 차트 요소
+    :param df: 직선 추세 데이터프레임
+    :return: dict() :: key = ['1Y평균저항선', '1Y평균지지선', '6M평균저항선', '6M평균지지선', '3M평균저항선', '3M평균지지선',
+                              '1Y', '6M', '3M']
+    """
+    meta = reform(span=df.index)
+    objects = {}
+    for n, col in enumerate(df.columns):
+        key = f"{col[:4] if '평균' in col else col[:2]}추세"
+        objects[col] = go.Scatter(
+            name=key, x=df.index, y=df[col],
+            mode='lines', line=dict(color='royalblue' if col.endswith('저항선') else 'red'),
+            visible='legendonly', showlegend=False if col.endswith('지지선') else True,
+            legendgroup=key,
+            meta=meta,
+            hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,d}원<extra></extra>'
+        )
+    return objects
+
 class Chart:
     def __init__(self, obj):
         self.obj = obj
@@ -168,62 +209,23 @@ class Chart:
         for key, obj in obj_price(df=self.obj.price).items():
             fig.add_trace(obj, row=1, col=1)
 
-        # 볼린저 밴드 차트
+        # 볼린저 밴드
         for key, obj in obj_bollinger(df=self.obj.bollinger).items():
             if key in ['상한선', '기준선', '하한선', '상한지시', '하한지시']:
                 fig.add_trace(obj, row=1, col=1)
 
         # 피벗 포인트
-        trend = self.obj.trend.copy()
-        for col in [col for col in trend.columns if col.startswith('PV')]:
-            df = trend[col].dropna()
-            fig.add_trace(go.Scatter(
-                name=col,
-                x=df.index,
-                y=df.astype(int),
-                mode='markers',
-                marker=dict(symbol='circle', color='royalblue' if '저항' in col else 'red'),
-                visible='legendonly',
-                hoverinfo='skip'
-            ))
+        for key, obj in obj_pivot(df=self.obj.pivot).items():
+            fig.add_trace(obj, row=1, col=1)
 
-        # 추세선
-        for col in [col for col in trend.columns if col.startswith('Avg')]:
-            df = trend[col].dropna()
-            fig.add_trace(go.Scatter(
-                name=col,
-                x=df.index,
-                y=df,
-                mode='lines',
-                line=dict(
-                    color='royalblue' if col.endswith('저항선') else 'red',
-                    dash='dash'
-                ),
-                hovertemplate=col,
-                visible='legendonly'
-            ))
-
-        for col in [col for col in trend.columns if col[-1].isdigit()]:
-            df = trend[col].dropna()
-            fig.add_trace(go.Scatter(
-                legendgroup=f'추세선{col[-1]}',
-                name=f'추세선{col[-1]}',
-                x=df.index,
-                y=df,
-                mode='lines',
-                line=dict(
-                    color='royalblue' if '저항' in col else 'red',
-                    dash='dot'
-                ),
-                hovertemplate=col,
-                visible='legendonly',
-                showlegend=False if '저항' in col else True
-            ))
+        # 평균 추세선
+        for key, obj in obj_trend(df=self.obj.avg_trend).items():
+            fig.add_trace(obj, row=1, col=1)
 
         # 필터선
         guide = self.obj.filters.copy()
         for col in guide.columns:
-            if col.startswith('FIR') or col.startswith('EMA') or col.startswith('IIR'):
+            if col.startswith('EMA') or col.startswith('IIR'):
                 continue
             fig.add_trace(go.Scatter(
                 x=guide.index,
@@ -282,14 +284,17 @@ class Chart:
                 fig.add_trace(obj, row=2, col=1)
             elif key == '신호':
                 fig.add_trace(obj, row=3, col=1)
+        fig.add_hline(y=1, row=3, col=1, line=dict(dash='dot', width=0.5, color='black'))
+        fig.add_hline(y=0, row=3, col=1, line=dict(dash='dot', width=0.5, color='black'))
+
 
         # 레이아웃
         layout = self.layout_basic(title='볼린저 밴드 차트', x_title='', y_title='가격(KRW)')
         layout.update(dict(
             xaxis2=dict(showgrid=True, gridcolor='lightgrey'),
-            yaxis2=dict(title='밴드폭', showgrid=True, gridcolor='lightgrey', showzeroline=True),
+            yaxis2=dict(title='밴드폭', showgrid=True, gridcolor='lightgrey', zeroline=True),
             xaxis3=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
-            yaxis3=dict(title='매매구간', showgrid=True, gridcolor='lightgrey', showzeroline=True)
+            yaxis3=dict(title='매매구간', showgrid=True, gridcolor='lightgrey', zeroline=True)
         ))
         fig.update_layout(layout)
         if show:

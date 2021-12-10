@@ -1,7 +1,7 @@
 import tdatool as tt
 
 if __name__ == "__main__":
-    ticker = '100090'
+    ticker = '006400'
 
     stock = tt.Evaluate(ticker=ticker, src='local', period=5)
     print(f'{stock.name}({stock.ticker}) 분석')

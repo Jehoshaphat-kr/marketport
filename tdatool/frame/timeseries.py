@@ -6,6 +6,8 @@ from pykrx import stock
 from scipy.signal import butter, filtfilt
 from scipy.stats import linregress
 from ta import add_all_ta_features as lib
+np.seterr(divide='ignore', invalid='ignore')
+
 
 class analytic:
 
@@ -17,8 +19,10 @@ class analytic:
 
         # Fetch Price
         self.price = frm.fetch(ticker=ticker, src=src, period=period)
-        self.fillz()
-        self.p_lib = lib(self.price, open='시가', close='종가', low='저가', high='고가', volume='거래량')
+        self.__fillz__()
+
+        # Technical Analysis
+        self.p_lib = lib(self.price.copy(), open='시가', close='종가', low='저가', high='고가', volume='거래량')
         # print(self.p_lib)
         print(self.p_lib.columns)
 
@@ -26,12 +30,12 @@ class analytic:
         self._filters_ = pd.DataFrame()
         self._guidance_ = pd.DataFrame()
         self._bend_point_ = pd.DataFrame()
-        self._thres_ = pd.DataFrame()
         self._pivot_ = pd.DataFrame()
+        self._avg_trend_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         return
 
-    def fillz(self):
+    def __fillz__(self):
         """
         거래 중지 이력 Fill Data 전처리
         :return:
@@ -176,9 +180,9 @@ class analytic:
         return self._pivot_
 
     @property
-    def trend(self) -> pd.DataFrame:
+    def avg_trend(self) -> pd.DataFrame:
         """
-        추세선
+        평균 추세선
         :return:
         """
         def avg(price:pd.DataFrame, pivot:pd.DataFrame, days_ago:int, label:str) -> pd.Series:
@@ -197,14 +201,44 @@ class analytic:
             support = pd.Series(data=slope * base['N'] + intercept, index=base.index, name=f'{label}평균지지선')
             return pd.concat(objs=[resist, support], axis=1)
 
-        if self._trend_.empty:
+        if self._avg_trend_.empty:
             gaps = [('1Y', 365), ('6M', 183), ('3M', 91)]
             avg_trend = pd.concat(
                 objs = [avg(price=self.price, pivot=self.pivot, days_ago=days, label=label) for label, days in gaps],
                 axis=1
             )
-            self._trend_ = avg_trend
-        return self._trend_
+            self._avg_trend_ = avg_trend
+        return self._avg_trend_
+
+    @property
+    def trend(self) -> pd.DataFrame:
+        if self._trend_.empty:
+            ago = self.price.index[-1] - timedelta(365)
+            base = self.price[self.price.index >= ago].copy()
+            base['N'] = np.arange(len(base)) + 1
+            base = base.join(self.pivot, how='left')
+
+            y = base['고점'].dropna()
+            x = base[base.index.isin(y.index)]['N']
+            slope, intercept, r_value, p_value, std_err = linregress(x, y)
+            print(slope, intercept)
+            base['저항선'] = slope * base['N'] + intercept
+            # line = pd.Series(data=(slope * base['N'] + intercept).values, index=base['N'])
+            print(base['저항선'])
+            while len(base['저항선'].dropna()) > 3:
+                base['저항선'] = base.loc[base['고가'] > slope * base['N'] + intercept]['저항선']
+                # print(base['저항선'])
+                y = base['고점'].dropna()
+                x = base[base.index.isin(y.index)]['N']
+                slope, intercept, r_value, p_value, std_err = linregress(x, y)
+                base['저항선'] = slope * base['N'] + intercept
+                # slope, intercept, r_value, p_value, std_err = linregress(x=base['N'], y=base['저항선'])
+                print(slope, intercept)
+
+
+            # print(base['저항선'])
+        #     print(line)
+        # return self._trend_
 
 
 if __name__ == "__main__":
@@ -217,4 +251,6 @@ if __name__ == "__main__":
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
     # print(api.bollinger)
+    # print(api.pivot)
+    # print(api.avg_trend)
     print(api.trend)
