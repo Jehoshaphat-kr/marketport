@@ -23,9 +23,8 @@ class analytic:
         self.__fillz__()
 
         # Technical Analysis
+        # https://technical-analysis-library-in-python.readthedocs.io/en/latest/ta.html#trend-indicators
         self.p_lib = lib(self.price.copy(), open='시가', close='종가', low='저가', high='고가', volume='거래량')
-        # print(self.p_lib)
-        print(self.p_lib.columns)
 
         # Empty Property
         self._filters_ = pd.DataFrame()
@@ -172,6 +171,19 @@ class analytic:
             }, axis=1
         )
 
+    @property
+    def vortex(self) -> pd.DataFrame:
+        """
+        주가 Vortex 데이터프레임
+        :return:
+        """
+        return pd.concat(
+            objs={
+                'VORTEX(+)': self.p_lib.trend_vortex_ind_pos,
+                'VORTEX(-)': self.p_lib.trend_vortex_ind_neg,
+                'VORTEX-Diff': self.p_lib.trend_vortex_ind_diff
+            }, axis=1
+        )
 
     @property
     def bend_point(self) -> pd.DataFrame:
@@ -309,4 +321,5 @@ if __name__ == "__main__":
     # print(api.h_sup_res)
     # print(api.bollinger)
     # print(api.pivot)
-    print(api.trend)
+    # print(api.trend)
+    print(api.vortex)
