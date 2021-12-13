@@ -1,12 +1,12 @@
 import pandas as pd
-from tdatool.frame import prices, numbers
+from tdatool.frame import prices, fundamentals
 
 
-class Evaluate(prices, numbers):
+class Evaluate(prices, fundamentals):
 
     def __init__(self, ticker: str, src: str = 'git', period:int = 5):
         prices.__init__(self, ticker=ticker, src=src, period=period)
-        # fund.__init__(self, ticker=ticker)
+        fundamentals.__init__(self, ticker=ticker)
 
         self.ticker = ticker
 

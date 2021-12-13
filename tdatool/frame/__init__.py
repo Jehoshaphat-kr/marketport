@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from findiff import FinDiff
 from datetime import datetime, timedelta
-from .finances import fetch as numbers
+from .finances import fetch as fundamentals
 from .timeseries import analytic as prices
 
 

@@ -1,11 +1,2 @@
-from .traces import (
-    price,
-    volume,
-    filters,
-    bollinger,
-    pivot,
-    trend,
-    rsi
-)
-
+from .traces import *
 from .chart import Chart

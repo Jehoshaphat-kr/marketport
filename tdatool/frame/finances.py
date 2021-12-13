@@ -28,6 +28,7 @@ class fetch:
         self._consensus_ = pd.DataFrame()
         self._factors_ = pd.DataFrame()
         self._shorts_ = pd.DataFrame()
+        self._balance_ = pd.DataFrame()
         self._product_ = pd.DataFrame()
         self._rnd_ = pd.DataFrame()
         return
@@ -106,6 +107,21 @@ class fetch:
             }).set_index(keys='날짜')
             self._shorts_.index = pd.to_datetime(self._shorts_.index)
         return self._shorts_
+
+    @property
+    def balance(self) -> pd.DataFrame:
+        """
+        대차 잔고 비중 데이터프레임
+        :return:
+        """
+        if self._balance_.empty:
+            url = f"http://cdn.fnguide.com/SVO2/json/chart/11_01/chart_A{self.ticker}_BALANCE1Y.json"
+            data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+            self._balance_ = pd.DataFrame(data['CHART'])[['TRD_DT', 'BALANCE_RT', 'ADJ_PRC']].rename(columns={
+                'TRD_DT': '날짜', 'BALANCE_RT': '대차잔고비중', 'ADJ_PRC': '수정 종가'
+            }).set_index(keys='날짜')
+            self._balance_.index = pd.to_datetime(self._balance_.index)
+        return self._balance_
 
     @property
     def annual(self) -> pd.DataFrame:
@@ -228,6 +244,9 @@ if __name__ == "__main__":
 
     print("# 차입 공매도 현황")
     print(api.short)
+
+    print("# 대차잔고비중")
+    print(api.balance)
     # print(api.consensus)
     # print(api.factors)
     # print(api.product)
