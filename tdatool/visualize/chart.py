@@ -285,6 +285,54 @@ class Chart:
             save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-수급평가.html")
         return fig
 
+    def show_multiples(self, show: bool = False, save: bool = False) -> go.Figure:
+        """
+
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(
+            rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.1,
+            subplot_titles=("PSR", "PER", "PBR", "배당 수익률"),
+            specs=[[{"type": "xy", "secondary_y": True}, {"type": "xy", "secondary_y": True}],
+                   [{"type": "xy", "secondary_y": True}, {"type": "xy", 'secondary_y': True}]]
+        )
+
+        # PSR, 매출액
+        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['매출액', 'PSR']):
+            secondary_y = True if key == 'PSR' else False
+            fig.add_trace(obj, row=1, col=1, secondary_y=secondary_y)
+
+        # PER, EPS
+        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['EPS', 'PER']):
+            secondary_y = True if key == 'PER' else False
+            fig.add_trace(obj, row=1, col=2, secondary_y=secondary_y)
+
+        # PBR, BPS
+        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['BPS', 'PBR']):
+            secondary_y = True if key == 'PBR' else False
+            fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
+
+        # DIV, DPS
+        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['DPS', 'DIV']):
+            secondary_y = True if key == 'DIV' else False
+            fig.add_trace(obj, row=2, col=2, secondary_y=secondary_y)
+
+        # 레이아웃
+        fig.update_layout(dict(
+            title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 투자 배수',
+            plot_bgcolor='white'
+        ))
+        for row, col in ((1, 1), (1, 2), (2, 1), (2, 2)):
+            fig.update_yaxes(title_text="KRW", showgrid=True, gridcolor='lightgrey', row=row, col=col, secondary_y=False)
+            fig.update_yaxes(title_text="배수[-, %]", showgrid=False, row=row, col=col, secondary_y=True)
+        if show:
+            fig.show()
+        if save:
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-투자배수.html")
+        return fig
+    
     # def show_trend(self, show: bool = False, save: bool = False):
     #     """
     #     추세선 및 MACD
@@ -427,29 +475,7 @@ class Chart:
 #         """
 #         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
 #                             subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "EPS, BPS"))
-#
-#         df_a = self.annual_statement
-#         df_q = self.quarter_statement
-#         for n, col in enumerate(['ROA', 'ROE', '영업이익률']):
-#             fig.add_trace(go.Bar(
-#                 x=df_a.index,
-#                 y=df_a[col],
-#                 name=f'연간{col}',
-#                 marker=dict(color=colors[n]),
-#                 legendgroup=col,
-#                 hovertemplate=col + ': %{y}%<extra></extra>',
-#                 opacity=0.9,
-#             ), row=1, col=1)
-#
-#             fig.add_trace(go.Bar(
-#                 x=df_q.index,
-#                 y=df_q[col],
-#                 name=f'분기{col}',
-#                 marker=dict(color=colors[n]),
-#                 legendgroup=col,
-#                 hovertemplate=col + ': %{y}%<extra></extra>',
-#                 opacity=0.9,
-#             ), row=1, col=2)
+
 #
 #         for n, col in enumerate(['PER', 'PBR', 'PSR', 'PEG']):
 #             fig.add_trace(go.Bar(

@@ -95,7 +95,6 @@ def trace_bollinger(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
     """
     볼린저밴드 차트 요소
     :param df: 볼린저밴드 데이터프레임
-    :param group: 범례 그룹 여부
     :return: dict() :: key = ['상한선', '기준선', '하한선', '상한지시', '하한지시', '밴드폭', '신호']
     """
     require = ['상한선', '기준선', '하한선']
@@ -279,13 +278,10 @@ def trace_sales(df:pd.DataFrame, is_annual:bool=True) -> ItemsView[str, go.Bar]:
     key = '매출액'
     key = '순영업수익' if '순영업수익' in df.columns else key
     key = '보험료수익' if '보험료수익' in df.columns else key
-    require = ['시가총액', '영업이익', '당기순이익']
-    columns = df.columns.values
-    if not len([x for x in require if x in columns]) == len(require):
-        raise KeyError(f'argument not sufficient for annual statement data')
+    require = [key, '영업이익', '당기순이익']
 
     objects = dict()
-    for n, col in enumerate(['시가총액', key, '영업이익', '당기순이익']):
+    for n, col in enumerate(require):
         y = df[col].fillna(0).astype(int)
         objects[col] = go.Bar(
             name=f'연간{col}' if is_annual else f'분기{col}', x=df.index, y=y,
@@ -295,6 +291,52 @@ def trace_sales(df:pd.DataFrame, is_annual:bool=True) -> ItemsView[str, go.Bar]:
             hovertemplate=col + ': %{meta}억원<extra></extra>',
         )
     return objects.items()
+
+def trace_sales_ratio(df:pd.DataFrame) -> ItemsView[str, go.Bar]:
+    """
+    Company Guide 연간 실적 배수 차트 요소
+    :param df: 연간 실적 배수 데이터프레임
+    :return: dict() :: Key ['ROE', 'ROA', '영업이익률']
+    """
+    require = ['ROA', 'ROE', '영업이익률']
+    columns = df.columns.values
+    if not len([x for x in require if x in columns]) == len(require):
+        raise KeyError(f'argument not sufficient for annual statement data')
+
+    objects = dict()
+    for n, col in enumerate(require):
+        objects[col] = go.Bar(
+            name=f'연간{col}', x=df.index, y=df[col],
+            marker=dict(color=colors[n]), opacity=0.9,
+            legendgroup=col,
+            hovertemplate=col + ': %{y}%<extra></extra>',
+        )
+    return objects.items()
+
+def trace_multiple(df:pd.DataFrame, require:list) -> ItemsView[str, go.Scatter]:
+    """
+    PyKrx 투자 배수 차트 요소
+    :param df: 투자 배수 시계열 데이터프레임
+    :param require: 지표/근거 지표 입력 (e.g. PSR/매출/시가총액)
+    :return: dict() Key
+    """
+    meta = reform(span=df.index)
+    objects = dict()
+    for n, col in enumerate(require):
+        is_base = col in ['매출액', 'EPS', 'BPS', 'DPS']
+        cd = [
+            str(_) if _ < 10000 else str(_)[:-4] + '조 ' + str(_)[-4:] for _ in df[col]
+        ] if col == '매출액' else df[col]
+        hover = ': %{customdata:,}원' if is_base else ': %{customdata:.2f}'
+        hover = ': %{customdata}원' if col == '매출액' else hover
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            visible=True, showlegend=True,
+            meta=meta, customdata=cd,
+            hovertemplate='날짜: %{meta}<br>' + col + hover + '<extra></extra>'
+        )
+    return objects.items()
+
 
 def trace_factors(df:pd.DataFrame) -> ItemsView[str, go.Scatterpolar]:
     """
@@ -324,7 +366,7 @@ def trace_consensus(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
         raise KeyError(f'argument not sufficient for consensus data')
 
     objects = dict()
-    for col in ['목표주가', '종가']:
+    for col in require:
         sr = df[col].dropna()
         objects[col] = go.Scatter(
             name=col, x=sr.index, y=sr.astype(int),

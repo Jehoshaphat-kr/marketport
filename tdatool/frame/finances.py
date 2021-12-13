@@ -23,7 +23,7 @@ class fetch:
         self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
 
         # Initialize DataFrames
-        self._marketcap_ = pd.DataFrame()
+        self._multiples_ = pd.DataFrame()
         self._foreigner_ = pd.DataFrame()
         self._consensus_ = pd.DataFrame()
         self._factors_ = pd.DataFrame()
@@ -129,7 +129,13 @@ class fetch:
         연간 실적/비율/배수 데이터프레임
         :return:
         """
-        return self.reform_statement(self.obj1[14] if self.is_separate else self.obj1[11])
+        df_copy = (self.obj1[14] if self.is_separate else self.obj1[11]).copy()
+        cols = df_copy.columns.tolist()
+        df_copy.set_index(keys=[cols[0]], inplace=True)
+        df_copy.index.name = None
+        df_copy.columns = df_copy.columns.droplevel()
+        df_copy = df_copy.T
+        return df_copy
 
     @property
     def quarter(self) -> pd.DataFrame:
@@ -137,7 +143,13 @@ class fetch:
         분기 실적/비율/배수 데이터프레임
         :return:
         """
-        return self.reform_statement(self.obj1[15] if self.is_separate else self.obj1[12])
+        df_copy = (self.obj1[15] if self.is_separate else self.obj1[12]).copy()
+        cols = df_copy.columns.tolist()
+        df_copy.set_index(keys=[cols[0]], inplace=True)
+        df_copy.index.name = None
+        df_copy.columns = df_copy.columns.droplevel()
+        df_copy = df_copy.T
+        return df_copy
 
     @property
     def product(self) -> pd.DataFrame:
@@ -196,60 +208,63 @@ class fetch:
             self._rnd_ = df.copy()
         return self._rnd_
 
-    def reform_statement(self, df:pd.DataFrame) -> pd.DataFrame:
+    @property
+    def multiples(self) -> pd.DataFrame:
         """
-        기업 기본 재무정보
-        :param df: 원 데이터프레임
+        PY KRX 투자 배수 / EPS 데이터프레임 (반복 호출 불가)
         :return:
         """
-        df_copy = df.copy()
-        cols = df_copy.columns.tolist()
-        df_copy.set_index(keys=[cols[0]], inplace=True)
-        df_copy.index.name = None
-        df_copy.columns = df_copy.columns.droplevel()
-        df_copy = df_copy.T
+        if self._multiples_.empty:
+            fromdate = (today - timedelta(365 * 3)).strftime("%Y%m%d")
+            todate = today.strftime("%Y%m%d")
+            ratio = stock.get_market_fundamental_by_date(fromdate=fromdate, todate=todate, ticker=self.ticker)
+            marketcap = stock.get_market_cap_by_date(fromdate=fromdate, todate=todate, ticker=self.ticker)
 
-        key = [i[:-3] if i.endswith(')') else i for i in df_copy.index]
-        if self._marketcap_.empty:
-            from_date = (today - timedelta(365 * 7)).strftime("%Y%m%d")
-            to_date = today.strftime("%Y%m%d")
-            self._marketcap_ = stock.get_market_cap_by_date(
-                fromdate=from_date, todate=to_date, ticker=self.ticker, freq='m'
-            )
-            self._marketcap_['ID'] = [date.strftime("%Y/%m") for date in self._marketcap_.index]
-            self._marketcap_['시가총액'] = (self._marketcap_['시가총액'] / 100000000).astype(int)
-        cap = self._marketcap_[self._marketcap_['ID'].isin(key)][['ID', '시가총액']].copy().set_index(keys='ID')
-        df_copy = df_copy.join(cap, how='left')
-        df_copy['PSR'] = round(df_copy['시가총액'] / df_copy[df_copy.columns[0]], 2)
-        peg = (df_copy['PER'] / (100*df_copy['EPS(원)'].pct_change())).values
-        df_copy['PEG'] = [round(v, 2) if v > 0 else 0 for v in peg]
-        return df_copy
+            quarter = self.quarter.copy()
+            key = '매출액'
+            key = '순영업수익' if '순영업수익' in quarter.columns else key
+            key = '보험료수익' if '보험료수익' in quarter.columns else key
+            q_sales = quarter[key].dropna()
+            q_sales = q_sales[q_sales.index.str.startswith(str(today.year))]
+
+            sales = self.annual[key].dropna()
+            sales = sales[~sales.index.str.endswith(')')]
+            sales = sales.append(to_append=pd.Series(data={f'{today.year}/12': 4 * q_sales.sum() / len(q_sales)}))
+            sales.index = sales.index + '/30'
+            sales.index = pd.to_datetime(sales.index)
+            sales.name = key
+            multiples = pd.concat(objs=[sales, marketcap], axis=1)[[key, '시가총액']]
+            multiples['매출액'] = multiples[key].interpolate(method='nearest').astype(int)
+            multiples['시가총액'] = multiples['시가총액']/100000000
+            multiples['PSR'] = multiples['시가총액'] / multiples[key]
+            self._multiples_ = multiples.join(ratio).dropna()
+        return self._multiples_
 
 
 if __name__ == "__main__":
-    api = fetch(ticker='009970')
+    api = fetch(ticker='005930')
     print(api.name)
-    print("# 사업 소개")
-    print(api.summary)
+    # print("# 사업 소개")
+    # print(api.summary)
 
     # print("# 연간 실적")
     # print(api.annual)
-    # print(api.annual['PEG'])
 
     # print("# 분기 실적")
     # print(api.quarter)
     
-    print("# 외국인 보유 비율")
-    print(api.foreigner)
+    # print("# 외국인 보유 비율")
+    # print(api.foreigner)
 
-    print("# 차입 공매도 현황")
-    print(api.short)
+    # print("# 차입 공매도 현황")
+    # print(api.short)
 
-    print("# 대차잔고비중")
-    print(api.balance)
+    # print("# 대차잔고비중")
+    # print(api.balance)
     # print(api.consensus)
     # print(api.factors)
     # print(api.product)
     # print(api.sgna)
     # print(api.cost)
     # print(api.rnd)
+    print(api.multiples)

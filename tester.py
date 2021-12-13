@@ -19,6 +19,7 @@ if __name__ == "__main__":
     chart = tt.Chart(obj=stock)
     chart.show_overview(show=False, save=True)
     chart.show_supply(show=False, save=True)
+    chart.show_multiples(show=False, save=True)
     chart.show_basic(show=False, save=True)
     chart.show_bollinger(show=False, save=True)
     chart.show_rsi(show=False, save=True)
