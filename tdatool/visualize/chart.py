@@ -199,7 +199,7 @@ class Chart:
         :return:
         """
         fig = make_subplots(
-            rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.1,
+            rows=2, cols=2, vertical_spacing=0.12, horizontal_spacing=0.1,
             subplot_titles=("제품 구성", "자산", "연간 실적", "분기 실적"),
             specs=[[{"type": "pie"}, {"type": "xy"}],
                    [{"type": "xy"}, {"type": "xy"}]]
@@ -218,12 +218,13 @@ class Chart:
             fig.add_trace(obj, row=2, col=1)
 
         # 분기 실적
-        for key, obj in tt.trace_sales(df=self.obj.quarter):
+        for key, obj in tt.trace_sales(df=self.obj.quarter, is_annual=False):
             fig.add_trace(obj, row=2, col=2)
 
         fig.update_layout(dict(
             title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 제품, 자산 및 실적',
-            plot_bgcolor='white'
+            plot_bgcolor='white',
+            margin=dict(l=0)
         ))
         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=1, col=2)
         fig.update_yaxes(title_text="억원", gridcolor='lightgrey', row=2, col=1)
@@ -287,7 +288,7 @@ class Chart:
 
     def show_multiples(self, show: bool = False, save: bool = False) -> go.Figure:
         """
-
+        투자 배수
         :param show:
         :param save:
         :return:
@@ -331,6 +332,48 @@ class Chart:
             fig.show()
         if save:
             save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-투자배수.html")
+        return fig
+
+    def show_cost(self, show: bool = False, save: bool = False) -> go.Figure:
+        """
+        지출 비용 
+       :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(
+            rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.1,
+            subplot_titles=("매출 원가", "판관비", "R&D투자 비중", "부채율"),
+            specs=[[{"type": "xy", "secondary_y": True}, {"type": "xy", "secondary_y": True}],
+                   [{"type": "xy", "secondary_y": True}, {"type": "xy", 'secondary_y': True}]]
+        )
+
+        # 매출원가
+        for key, obj in tt.trace_cost(df=self.obj.cost):
+            fig.add_trace(obj, row=1, col=1)
+
+        # 판관비
+        for key, obj in tt.trace_sga(df=self.obj.sgna):
+            fig.add_trace(obj, row=1, col=2)
+
+        # R&D 투자비중
+        for key, obj in tt.trace_rnd(df=self.obj.rnd):
+            fig.add_trace(obj, row=2, col=1)
+
+        # 부채비율
+        for key, obj in tt.trace_debt(df=self.obj.annual):
+            fig.add_trace(obj, row=2, col=2)
+
+        # 레이아웃
+        fig.update_layout(dict(title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 비용과 부채', plot_bgcolor='white'))
+        for row, col in ((1, 1), (1, 2), (2, 1), (2, 2)):
+            fig.update_yaxes(title_text="비율[%]", showgrid=True, gridcolor='lightgrey', row=row, col=col)
+            fig.update_xaxes(title_text="연말", showgrid=True, gridcolor='lightgrey')
+
+        if show:
+            fig.show()
+        if save:
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-지출비용.html")
         return fig
     
     # def show_trend(self, show: bool = False, save: bool = False):
@@ -460,52 +503,3 @@ class Chart:
 #                 visible='legendonly' if n else True,
 #                 hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
 #             ), row=1, col=1)
-#
-#
-#     def show_multiple(self, save: bool = False, show: bool = False) -> go.Figure:
-#         """
-#         [0, 0] 연간 재무비율:: ROE/ROA/영업이익률
-#         [0, 1] 분기 재무비율:: ROE/ROA/영업이익률
-#         [1, 0] 연간 투자배수:: PER/PBR/PSR/PEG
-#         [1, 1] 배당 수익률
-#
-#         :param save:
-#         :param show:
-#         :return:
-#         """
-#         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.11, horizontal_spacing=0.05,
-#                             subplot_titles=("연간 재무비율", "분기 재무비율", "투자 배수", "EPS, BPS"))
-
-#
-#         for n, col in enumerate(['PER', 'PBR', 'PSR', 'PEG']):
-#             fig.add_trace(go.Bar(
-#                 x=df_a.index,
-#                 y=df_a[col],
-#                 name=col,
-#                 hovertemplate=col + ': %{y}<extra></extra>',
-#                 opacity=0.9
-#             ), row=2, col=1)
-#
-#         for n, col in enumerate(['EPS(원)', 'BPS(원)']):
-#             fig.add_trace(go.Bar(
-#                 x=df_a.index,
-#                 y=df_a[col],
-#                 name=col.replace("(원)", ""),
-#                 hovertemplate=col + ': %{y:,}원<extra></extra>',
-#                 opacity=0.9
-#             ), row=2, col=2)
-#
-#         fig.update_layout(dict(
-#             title=f'<b>{self.name}[{self.ticker}]</b> : 투자 비율 및 배수',
-#             plot_bgcolor='white'
-#         ))
-#         fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=1)
-#         fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=2)
-#         fig.update_yaxes(title_text="-", gridcolor='lightgrey', row=2, col=1)
-#         fig.update_yaxes(title_text="원", gridcolor='lightgrey', row=2, col=2)
-#
-#         if show:
-#             fig.show()
-#         if save:
-#             of.plot(fig, filename=os.path.join(root, f"{self.ticker}{self.name}-배수비율.html"), auto_open=False)
-#         return fig

@@ -337,6 +337,77 @@ def trace_multiple(df:pd.DataFrame, require:list) -> ItemsView[str, go.Scatter]:
         )
     return objects.items()
 
+def trace_cost(df:pd.DataFrame) -> ItemsView[str, go.Bar]:
+    """
+    매출 원가 차트 요소
+    :param df: 매출 원가 데이터프레임
+    :return:
+    """
+    if not '매출원가율' in df.columns:
+        raise KeyError(f'argument not sufficient for cost data')
+
+    objects = dict()
+    objects['매출원가율'] = go.Bar(
+        name='매출원가율', x=df.index, y=df['매출원가율'],
+        visible=True, showlegend=True,
+        text=df['매출원가율'], textposition='auto', texttemplate='%{text:.2f}%',
+        hoverinfo='skip'
+    )
+    return objects.items()
+
+def trace_sga(df:pd.DataFrame) -> ItemsView[str, go.Bar]:
+    """
+    판관비 차트 요소
+    :param df: 판관비 데이터프레임
+    :return:
+    """
+    objects = dict()
+    if not '판관비율' in df.columns:
+        objects['판관비율'] = go.Scatter(name='판관비율', x=[1], y=[1], text=['데이터없음'])
+    else:
+        objects['판관비율'] = go.Bar(
+            name='판관비율', x=df.index, y=df['판관비율'],
+            text=df['판관비율'], textposition='auto', texttemplate='%{text:.2f}%',
+            hoverinfo='skip'
+        )
+    return objects.items()
+
+def trace_rnd(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
+    """
+    R&D 투자현황 차트 요소
+    :param df: R&D 투자 현황 데이터프레임
+    :return:
+    """
+    objects = dict()
+    if not 'R&D투자비중' in df.columns:
+        objects['R&D투자비중'] = go.Scatter(name='R&D투자비중', x=[1], y=[1], text=['데이터없음'])
+    else:
+        df = df.sort_index()
+        objects['R&D투자비중'] = go.Scatter(
+            name='R&D투자비중', x=df.index, y=df['R&D투자비중'],
+            mode='lines+markers+text',
+            text=df['R&D투자비중'], textposition='top center', texttemplate='%{text:.2f}%',
+            hoverinfo='skip'
+        )
+    return objects.items()
+
+def trace_debt(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
+    """
+    부채비율 차트 요소
+    :param df: 부채비율 포함 데이터프레임 (연간)
+    :return:
+    """
+    if not '부채비율' in df.columns:
+        raise KeyError(f'argument not sufficient for debt data')
+    objects = dict()
+    df = df.copy().dropna()
+    objects['부채비율'] = go.Scatter(
+        name='부채비율', x=df.index, y=df['부채비율'],
+        mode='lines+markers+text',
+        text=df['부채비율'], textposition='top center', texttemplate='%{text:.2f}%',
+        hoverinfo='skip'
+    )
+    return objects.items()
 
 def trace_factors(df:pd.DataFrame) -> ItemsView[str, go.Scatterpolar]:
     """

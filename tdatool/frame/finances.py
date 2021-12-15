@@ -248,8 +248,8 @@ if __name__ == "__main__":
     # print(api.summary)
 
     # print("# 연간 실적")
-    # print(api.annual)
-
+    print(api.annual)
+    print(api.annual['부채비율'])
     # print("# 분기 실적")
     # print(api.quarter)
     
@@ -267,4 +267,4 @@ if __name__ == "__main__":
     # print(api.sgna)
     # print(api.cost)
     # print(api.rnd)
-    print(api.multiples)
+    # print(api.multiples)
