@@ -140,9 +140,9 @@ class Chart:
         layout = self.layout_basic(title='볼린저 밴드 차트', x_title='', y_title='가격(KRW)')
         layout.update(dict(
             xaxis2=dict(showgrid=True, gridcolor='lightgrey'),
-            yaxis2=dict(title='밴드폭', showgrid=True, gridcolor='lightgrey', zeroline=True),
+            yaxis2=dict(title='매매구간', showgrid=True, gridcolor='lightgrey', zeroline=True),
             xaxis3=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
-            yaxis3=dict(title='매매구간', showgrid=True, gridcolor='lightgrey', zeroline=True)
+            yaxis3=dict(title='밴드폭', showgrid=True, gridcolor='lightgrey', zeroline=True)
         ))
         fig.update_layout(layout)
         if show:
@@ -151,40 +151,113 @@ class Chart:
             save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html")
         return fig
 
-    def show_rsi(self, show: bool = False, save: bool = False) -> go.Figure:
+    def show_momentum(self, show: bool = False, save: bool = False) -> go.Figure:
+        """
+        MACD / RSI / STC
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(
+            rows=4, cols=1, row_width=[0.2, 0.2, 0.2, 0.4], shared_xaxes=True, vertical_spacing=0.04,
+            specs=[[{"secondary_y": False}], [{"secondary_y": True}], [{"secondary_y": False}], [{"secondary_y": False}]]
+        )
+
+        # 주가 차트
+        for key, obj in tt.trace_price(df=self.obj.price):
+            fig.add_trace(obj, row=1, col=1)
+
+        # MACD
+        for key, obj in tt.trace_macd(df=self.obj.macd):
+            secondary_y = True if key.lower().endswith('hist') else False
+            fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
+
+        # RSI
+        for key, obj in tt.trace_rsi(df=self.obj.rsi):
+            fig.add_trace(obj, row=3, col=1)
+
+        # STC
+        for key, obj in tt.trace_stc(df=self.obj.stc):
+            fig.add_trace(obj, row=4, col=1)
+
+        # 레이아웃
+        layout = self.layout_basic(title='모멘텀', x_title='', y_title='가격(KRW)')
+        fig.update_layout(layout)
+        for label, row, col in (('MACD', 2, 1), ('RSI', 3, 1), ('STC', 4, 1)):
+            fig.update_xaxes(showgrid=True, gridcolor='lightgrey', showticklabels=True, row=row, col=col)
+            fig.update_yaxes(title_text=label, showgrid=True, gridcolor='lightgrey', showticklabels=True,
+                             row=row, col=col, secondary_y=False)
+        fig.update_yaxes(showticklabels=True, row=2, col=1, secondary_y=True)
+
+        if show:
+            fig.show()
+        if save:
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html")
+        return fig
+
+    def show_overtrade(self, show: bool = False, save: bool = False) -> go.Figure:
         """
         상대 강도 차트
         :param show:
         :param save:
         :return:
         """
-        fig = make_subplots(rows=3, cols=1, row_width=[0.15, 0.15, 0.7], shared_xaxes=True, vertical_spacing=0.05)
+        fig = make_subplots(rows=4, cols=1, row_width=[0.2, 0.2, 0.2, 0.4], shared_xaxes=True, vertical_spacing=0.04)
 
         # 주가 차트
         for key, obj in tt.trace_price(df=self.obj.price):
             fig.add_trace(obj, row=1, col=1)
 
-        # RSI 차트
-        for key, obj in tt.trace_rsi(df=self.obj.rsi):
-            if key == 'RSI':
-                fig.add_trace(obj, row=2, col=1)
-            elif key.startswith('STOCH'):
-                fig.add_trace(obj, row=3, col=1)
-            else:
-                fig.add_trace(obj, row=3, col=1)
-        fig.add_hline(y=70, row=2, col=1, line=dict(dash='dot', width=0.5, color='black'))
-        fig.add_hline(y=30, row=2, col=1, line=dict(dash='dot', width=0.5, color='black'))
+        # STOCHASTIC-RSI 차트
+        for key, obj in tt.trace_stoch_rsi(df=self.obj.stoch_rsi):
+            fig.add_trace(obj, row=2, col=1)
+
+        # CCI 차트
+        for key, obj in tt.trace_cci(df=self.obj.cci):
+            fig.add_trace(obj, row=3, col=1)
+
+        # TRIX 차트
+        for key, obj in tt.trace_trix(df=self.obj.trix):
+            fig.add_trace(obj, row=4, col=1)
 
         # 레이아웃
-        layout = self.layout_basic(title='RSI(상대 강세) 차트', x_title='', y_title='가격(KRW)')
-        layout.update(dict(
-            xaxis2=dict(showgrid=True, gridcolor='lightgrey'),
-            yaxis2=dict(title='RSI', showgrid=True, gridcolor='lightgrey', zeroline=True),
-            xaxis3=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
-            yaxis3=dict(title='STOCH-RSI', showgrid=True, gridcolor='lightgrey', zeroline=True)
-        ))
+        layout = self.layout_basic(title='과매수/매도 지표', x_title='', y_title='가격(KRW)')
         fig.update_layout(layout)
+        for label, row, col in (('Stochastic RSI', 2, 1), ('CCI', 3, 1), ('TRIX', 4, 1)):
+            fig.update_xaxes(showgrid=True, gridcolor='lightgrey', showticklabels=True, row=row, col=col)
+            fig.update_yaxes(title_text=label, showgrid=True, gridcolor='lightgrey', showticklabels=True,
+                             row=row, col=col, secondary_y=False)
+        if show:
+            fig.show()
+        if save:
+            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-RSI.html")
+        return fig
 
+    def show_vortex(self, show: bool = False, save: bool = False) -> go.Figure:
+        """
+        VORTEX 차트
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(rows=3, cols=1, row_width=[0.2, 0.2, 0.6], shared_xaxes=True, vertical_spacing=0.04)
+
+        # 주가 차트
+        for key, obj in tt.trace_price(df=self.obj.price):
+            fig.add_trace(obj, row=1, col=1)
+
+        # Vortex
+        for key, obj in tt.trace_vortex(df=self.obj.vortex):
+            row = 3 if key.endswith('Diff') else 2
+            fig.add_trace(obj, row=row, col=1)
+
+        # 레이아웃
+        layout = self.layout_basic(title='Vortex 지표', x_title='', y_title='가격(KRW)')
+        fig.update_layout(layout)
+        for label, row, col in (('Vortex', 2, 1), ('Vortex-Diff', 3, 1)):
+            fig.update_xaxes(showgrid=True, gridcolor='lightgrey', showticklabels=True, row=row, col=col)
+            fig.update_yaxes(title_text=label, showgrid=True, gridcolor='lightgrey', showticklabels=True,
+                             row=row, col=col, secondary_y=False)
         if show:
             fig.show()
         if save:
@@ -201,8 +274,7 @@ class Chart:
         fig = make_subplots(
             rows=2, cols=2, vertical_spacing=0.12, horizontal_spacing=0.1,
             subplot_titles=("제품 구성", "자산", "연간 실적", "분기 실적"),
-            specs=[[{"type": "pie"}, {"type": "xy"}],
-                   [{"type": "xy"}, {"type": "xy"}]]
+            specs=[[{"type": "pie"}, {"type": "xy"}], [{"type": "xy"}, {"type": "xy"}]]
         )
 
         # 제품 구성
@@ -274,7 +346,6 @@ class Chart:
             title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 수급 현황',
             plot_bgcolor='white'
         ))
-        fig.update_xaxes(title_text="날짜", showgrid=True, gridcolor='lightgrey')
         fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=1, col=1)
         for row, col in ((1, 2), (2, 1), (2, 2)):
             fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=row, col=col, secondary_y=True)
@@ -368,7 +439,6 @@ class Chart:
         fig.update_layout(dict(title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 비용과 부채', plot_bgcolor='white'))
         for row, col in ((1, 1), (1, 2), (2, 1), (2, 2)):
             fig.update_yaxes(title_text="비율[%]", showgrid=True, gridcolor='lightgrey', row=row, col=col)
-            fig.update_xaxes(title_text="연말", showgrid=True, gridcolor='lightgrey')
 
         if show:
             fig.show()
@@ -433,32 +503,6 @@ class Chart:
     #             hovertemplate='%{text}<br>날짜: %{meta}<br>값: %{y}<extra></extra>'
     #         ), row=1, col=1, secondary_y=True)
     #
-    #     # MACD
-    #     data = self.obj.macd
-    #     form = reform(span=data.index)
-    #     for n, col in enumerate(['MACD', 'MACD-Sig']):
-    #         fig.add_trace(go.Scatter(
-    #             x=data.index,
-    #             y=data[col],
-    #             name=col,
-    #             meta=form,
-    #             legendgroup='macd',
-    #             showlegend=True if not n else False,
-    #             hovertemplate=col + '<br>날짜: %{meta}<extra></extra>'
-    #         ), row=2, col=1, secondary_y=False)
-    #
-    #     fig.add_trace(go.Bar(
-    #         x=data.index,
-    #         y=data['MACD-Hist'],
-    #         meta=form,
-    #         name='MACD-Hist',
-    #         marker=dict(
-    #             color=['blue' if v < 0 else 'red' for v in data['MACD-Hist'].values]
-    #         ),
-    #         showlegend=False,
-    #         hovertemplate='날짜:%{meta}<br>히스토그램:%{y:.2f}<extra></extra>'
-    #     ), row=2, col=1, secondary_y=True)
-    #
     #     pick = point['detMACD'].dropna()
     #     fig.add_trace(go.Scatter(
     #         x=pick.index,
@@ -474,23 +518,6 @@ class Chart:
     #         legendgroup='macd',
     #         showlegend=False
     #     ), row=2, col=1)
-    #
-    #     layout = self.layout_basic(title='추세 분석 차트', x_title='', y_title='종가[KRW]')
-    #     layout.update(dict(
-    #         xaxis=dict(range=[tic, toc]),
-    #         xaxis2=dict(title='날짜', showgrid=True, gridcolor='lightgrey'),
-    #         yaxis2=dict(title='추세', showgrid=False, zeroline=True, zerolinecolor='grey', zerolinewidth=2),
-    #         yaxis3=dict(title='MACD', showgrid=True, gridcolor='lightgrey')
-    #     ))
-    #     fig.update_layout(layout)
-    #
-    #     if show:
-    #         fig.show()
-    #     if save:
-    #         of.plot(fig, filename=os.path.join(root, f"{self.obj.ticker}{self.obj.name}-추세차트.html"), auto_open=False)
-    #     return fig
-
-
 #         # 멀티 팩터
 #         df = self.multi_factor
 #         for n, col in enumerate(df.columns):

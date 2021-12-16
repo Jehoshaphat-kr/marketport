@@ -133,7 +133,9 @@ class analytic:
         STC: Schaff Trend Cycle 데이터프레임
         :return:
         """
-        return self.p_lib.trend_stc
+        sr = self.p_lib.trend_stc
+        sr.name = 'STC'
+        return sr
 
     @property
     def cci(self) -> pd.DataFrame:
@@ -141,34 +143,38 @@ class analytic:
         CCI: Commodity Channel Index 데이터프레임
         :return:
         """
-        return self.p_lib.trend_cci
+        sr = self.p_lib.trend_cci
+        sr.name = 'CCI'
+        return sr
 
     @property
-    def trix(self) -> pd.DataFrame:
+    def trix(self) -> pd.Series:
         """
-        TRIX:
+        TRIX: Triple exponential moving average
         :return:
         """
-        return pd.concat(
-            objs={
-                'TRIX':self.p_lib.trend_trix,
-                'TRIX-Sig':self.p_lib.trend_macd_signal,
-            }, axis=1
-        )
+        sr = self.p_lib.trend_trix
+        sr.name = 'TRIX'
+        return sr
 
     @property
     def rsi(self) -> pd.DataFrame:
         """
         RSI: Relative Strength Index 데이터프레임
-        RSI, Stoch-RSI
         :return:
         """
+        sr = self.p_lib.momentum_rsi
+        sr.name = 'RSI'
+        return sr 
+        
+    @property
+    def stoch_rsi(self) -> pd.DataFrame:
+        """
+        Stochastic RSI 데이터프레임
+        :return: 
+        """
         return pd.concat(
-            objs={
-                'RSI': self.p_lib.momentum_rsi,
-                'STOCH-RSI': self.p_lib.momentum_stoch,
-                'STOCH-RSI-Sig': self.p_lib.momentum_stoch_signal
-            }, axis=1
+            objs={'STOCH-RSI': self.p_lib.momentum_stoch, 'STOCH-RSI-Sig': self.p_lib.momentum_stoch_signal}, axis=1
         )
 
     @property
@@ -296,7 +302,7 @@ class analytic:
 
         if self._trend_.empty:
             objs = []
-            gaps = [('1Y', 365), ('6M', 183), ('3M', 91)]
+            gaps = [('1Y', 365), ('6M', 183), ('3M', 91), ('1M', 21)]
             for period, days in gaps:
                 on = self.price.index[-1] - timedelta(days)
                 frm_price = self.price[self.price.index >= on].copy()
@@ -321,5 +327,6 @@ if __name__ == "__main__":
     # print(api.h_sup_res)
     # print(api.bollinger)
     # print(api.pivot)
-    # print(api.trend)
-    print(api.vortex)
+    print(api.trend)
+    # print(api.stc)
+    # print(api.vortex)

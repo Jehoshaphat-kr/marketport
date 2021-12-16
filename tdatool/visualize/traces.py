@@ -135,8 +135,187 @@ def trace_macd(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
     :param df: MACD 데이터프레임
     :return:
     """
+    require = ['MACD', 'MACD-Sig', 'MACD-Hist']
+    columns = df.columns.values
+    if not len([x for x in require if x in columns]) == len(require):
+        raise KeyError(f'argument not sufficient for macd data')
+
+    meta = reform(span=df.index)
+    objects = dict()
+    for n, col in enumerate(['MACD', 'MACD-Sig']):
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            visible=True, showlegend=False if n else True, legendgroup='MACD',
+            meta=meta,
+            hovertemplate='날짜: %{meta}<br>' + col + ': %{y:.2f}<extra></extra>'
+        )
+
+    h = zip(df['MACD-Hist'], df['MACD-Hist'].pct_change().fillna(1))
+    color = ['red' if (s < 0 and v < 0) or (s > 0 and v > 0) else 'blue' for s, v in h]
+    objects['MACD-Hist'] = go.Bar(
+        name='MACD-Hist', x=df.index, y=df['MACD-Hist'],
+        marker=dict(color=color),
+        visible=True, showlegend=False, legendgroup='MACD',
+        meta=meta,
+        hoverinfo='skip'
+    )
+    return objects.items()
+
+def trace_rsi(df:pd.Series) -> ItemsView[str, go.Scatter]:
+    """
+    RSI 차트 요소
+    :param df: RSI 데이터프레임
+    :return: dict() :: key = 'RSI'
+    """
+    if not 'RSI' == df.name:
+        raise KeyError(f'argument not sufficient for rsi data')
+
     objects = dict()
 
+    objects['RSI'] = go.Scatter(
+        name='RSI', x=df.index, y=df,
+        mode='lines', line=dict(color='green'),
+        visible=True, showlegend=True,
+        meta=reform(span=df.index),
+        hovertemplate='날짜: %{meta}<br>RSI: %{y:.2f}<extra></extra>'
+    )
+    for name, value in (('RSI-H', 70), ('RSI-L', 30)):
+        objects[name] = go.Scatter(
+            name=name, x=df.index, y=[value] * len(df),
+            mode='lines', line=dict(width=0.8, color='black', dash='dot'),
+            visible=True, showlegend=False,
+            hoverinfo='skip'
+        )
+    return objects.items()
+
+def trace_stc(df:pd.Series) -> ItemsView[str, go.Scatter]:
+    """
+    STC Schaff Trend Cycle 차트 요소
+    :param df: STC 데이터프레임
+    :return:
+    """
+    if not 'STC' == df.name:
+        raise KeyError(f'argument not sufficient for stc data')
+    objects = dict()
+    objects['STC'] = go.Scatter(
+        name='STC', x=df.index, y=df,
+        visible=True, showlegend=True,
+        meta=reform(span=df.index),
+        hovertemplate='날짜: %{meta}<br>STC: %{y:.3f}%<extra></extra>'
+    )
+    return objects.items()
+
+def trace_stoch_rsi(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
+    """
+    Stochastic RSI
+    :param df: Stochastic RSI 데이터프레임
+    :return:
+    """
+    require = ['STOCH-RSI', 'STOCH-RSI-Sig']
+    columns = df.columns.values
+    if not len([x for x in require if x in columns]) == len(require):
+        raise KeyError(f'argument not sufficient for pivot data')
+
+    meta = reform(span=df.index)
+    objects = dict()
+    for n, col in enumerate(df.columns):
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            visible=True, showlegend=True,
+            meta=meta,
+            hovertemplate='날짜: %{meta}<br>' + col + ': %{y:.2f}<extra></extra>'
+        )
+    for n, label in enumerate(['upper', 'lower']):
+        objects[label] = go.Scatter(
+            name='RSI(S)-Range', x=df.index, y=[20 if n else 80] * len(df),
+            mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
+            visible=True, showlegend=True if n else False, legendgroup='Range',
+            hoverinfo='skip'
+        )
+    return objects.items()
+
+def trace_cci(df:pd.Series) -> ItemsView[str, go.Scatter]:
+    """
+    CCI Commodity Channel Index
+    :param df: CCI 데이터프레임
+    :return:
+    """
+    if not df.name == 'CCI':
+        raise KeyError('argument not sufficient for ccir data')
+
+    objects = dict()
+    objects['CCI'] = go.Scatter(
+        name='CCI', x=df.index, y=df,
+        visible=True, showlegend=True,
+        meta=reform(span=df.index),
+        hovertemplate='날짜: %{meta}<br>CCI: %{y:.2f}<extra></extra>'
+    )
+    for n, label in enumerate(['upper', 'lower']):
+        objects[label] = go.Scatter(
+            name='CCI-Range', x=df.index, y=[-100 if n else 100] * len(df),
+            mode='lines', line=dict(color='rgb(111, 231, 219)'), fill='tonexty' if n else None,
+            visible=True, showlegend=True if n else False, legendgroup='C-Range',
+            hoverinfo='skip'
+        )
+    for name, value in (('CCI-H', 200), ('CCI-L', -200)):
+        objects[name] = go.Scatter(
+            name=name, x=df.index, y=[value] * len(df),
+            mode='lines', line=dict(width=0.8, color='black', dash='dot'),
+            visible=True, showlegend=False,
+            hoverinfo='skip'
+        )
+    return objects.items()
+
+def trace_trix(df:pd.Series) -> ItemsView[str, go.Scatter]:
+    """
+    TRIX 차트 요소
+    :param df: TRIX 데이터프레임
+    :return: dict() :: key = ['TRIX']
+    """
+    if not 'TRIX' == df.name:
+        raise KeyError('argument not sufficient for trix data')
+
+    objects = dict()
+    objects['TRIX'] = go.Scatter(
+        name='TRIX', x=df.index, y=df,
+        visible=True, showlegend=True,
+        meta=reform(span=df.index),
+        hovertemplate='날짜: %{meta}<br>TRIX: %{y:.2f}<extra></extra>'
+    )
+    objects['Zero'] = go.Scatter(
+        name='Zero', x=df.index, y=[0] * len(df),
+        mode='lines', line=dict(width=0.8, color='black', dash='dot'),
+        visible=True, showlegend=False,
+        hoverinfo='skip'
+    )
+    return objects.items()
+
+def trace_vortex(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
+    """
+    Vortex 차트 요소
+    :param df: Vortex 데이터프레임
+    :return:
+    """
+    require = ['VORTEX(+)', 'VORTEX(-)', 'VORTEX-Diff']
+    columns = df.columns.values
+    if not len([x for x in require if x in columns]) == len(require):
+        raise KeyError(f'argument not sufficient for vortex data')
+
+    meta = reform(span=df.index)
+    objects = dict()
+    for col in df.columns:
+        objects[col] = go.Scatter(
+            name=col, x=df.index, y=df[col],
+            visible=True, showlegend=True,
+            meta=meta,
+            hovertemplate='날짜: %{meta}<br>' + col + ': %{y:.3f}<extra></extra>'
+        )
+    objects['ZDiff'] = go.Scatter(
+        name='Zero', x=df.index, y=[0]*len(df),
+        mode='lines', line=dict(width=0.8, color='black', dash='dot'),
+        visible=True, showlegend=False,
+        hoverinfo='skip'
+    )
     return objects.items()
 
 def trace_pivot(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
@@ -186,36 +365,6 @@ def trace_trend(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
             visible='legendonly', showlegend=False if col.endswith('지지선') else True, legendgroup=key,
             meta=meta,
             hovertemplate='날짜: %{meta}<br>' + col + ': %{y:,d}원<extra></extra>'
-        )
-    return objects.items()
-
-def trace_rsi(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
-    """
-    RSI 차트 요소
-    :param df: RSI 데이터프레임
-    :return: dict() :: key = ['RSI', 'STOCH-RSI', 'STOCH-RSI-Sig']
-    """
-    require = ['RSI', 'STOCH-RSI', 'STOCH-RSI-Sig']
-    columns = df.columns.values
-    if not len([x for x in require if x in columns]) == len(require):
-        raise KeyError(f'argument not sufficient for trend line data')
-
-    meta = reform(span=df.index)
-    objects = dict()
-    for n, col in enumerate(df.columns):
-        name = col.replace('STOCH-RSI', 'RSI(S)') if col.startswith('STOCH') else col
-        objects[col] = go.Scatter(
-            name=name, x=df.index, y=df[col],
-            visible=True, showlegend=True,
-            meta=meta,
-            hovertemplate='날짜: %{meta}<br>' + name + ': %{y:.2f}<extra></extra>'
-        )
-    for n, label in enumerate(['upper', 'lower']):
-        objects[label] = go.Scatter(
-            name='RIS(S)-Range', x=df.index, y=[20 if n else 80] * len(df),
-            mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
-            visible='legendonly', showlegend=True if n else False, legendgroup='Range',
-            hoverinfo='skip'
         )
     return objects.items()
 
@@ -400,7 +549,7 @@ def trace_debt(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
     if not '부채비율' in df.columns:
         raise KeyError(f'argument not sufficient for debt data')
     objects = dict()
-    df = df.copy().dropna()
+    df = df[['부채비율']].copy().dropna()
     objects['부채비율'] = go.Scatter(
         name='부채비율', x=df.index, y=df['부채비율'],
         mode='lines+markers+text',

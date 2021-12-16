@@ -9,8 +9,8 @@ if __name__ == "__main__":
     # ticker = '035420' # NAVER
     # ticker = '247540' # 에코프로비엠
     # ticker = '207940' # 삼성바이오로직스
-    ticker = '005380' # 현대차
-    # ticker = '243840' # 신흥에스이씨
+    # ticker = '005380' # 현대차
+    ticker = '243840' # 신흥에스이씨
 
     stock = tt.Evaluate(ticker=ticker, src='local', period=5)
     print(f'{stock.name}({stock.ticker}) 분석')
@@ -26,3 +26,6 @@ if __name__ == "__main__":
     # chart.show_bollinger(show=False, save=True)
     # chart.show_rsi(show=False, save=True)
     # chart.show_cost(show=False, save=True)
+    # chart.show_momentum(show=False, save=True)
+    # chart.show_overtrade(show=False, save=True)
+    chart.show_vortex(show=True, save=False)

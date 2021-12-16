@@ -4,10 +4,9 @@ from tdatool.frame import prices, fundamentals
 
 class Evaluate(prices, fundamentals):
 
-    def __init__(self, ticker: str, src: str = 'git', period:int = 5):
+    def __init__(self, ticker: str, src: str = 'github', period:int = 5):
         prices.__init__(self, ticker=ticker, src=src, period=period)
         fundamentals.__init__(self, ticker=ticker)
-
         self.ticker = ticker
 
         # Usage Frames
@@ -62,8 +61,20 @@ class Evaluate(prices, fundamentals):
             self._spectra_ = pd.concat(objs=data, axis=1)
         return self._spectra_
 
+    def trend_scalar(self, period:str='3M', kind:str='avg'):
+        """
+        추세선 강도
+        :param period: 기간 - 1Y/6M/3M/1M
+        :param kind: avg 또는 그 외
+        :return:
+        """
+        key = period + ('평균' if kind.lower().startswith('avg') else '표준') + '지지선'
+        data = self.trend[key].dropna().values
+        return round(data[-1]/data[0] - 1, 6)
+
 if __name__ == "__main__":
     ev = Evaluate(ticker='006400')
 
     # print(ev.performance)
-    print(ev.spectra)
+    # print(ev.spectra)
+    print(ev.trend_scalar())
