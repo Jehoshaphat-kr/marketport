@@ -10,22 +10,23 @@ if __name__ == "__main__":
     # ticker = '247540' # 에코프로비엠
     # ticker = '207940' # 삼성바이오로직스
     # ticker = '005380' # 현대차
-    ticker = '243840' # 신흥에스이씨
+    # ticker = '243840' # 신흥에스이씨
+    ticker = '007070'
 
-    stock = tt.Evaluate(ticker=ticker, src='local', period=5)
+    meta = tt.metadata().market_data
+
+    stock = tt.analytic(ticker=ticker, src='local', period=5, meta=meta)
     print(f'{stock.name}({stock.ticker}) 분석')
     print('=' * 120)
     print(stock.summary)
 
-    chart = tt.Chart(obj=stock)
-
-    # chart.show_overview(show=False, save=True)
-    # chart.show_supply(show=False, save=True)
-    # chart.show_multiples(show=False, save=True)
-    # chart.show_basic(show=False, save=True)
-    # chart.show_bollinger(show=False, save=True)
-    # chart.show_rsi(show=False, save=True)
-    # chart.show_cost(show=False, save=True)
-    # chart.show_momentum(show=False, save=True)
-    # chart.show_overtrade(show=False, save=True)
-    chart.show_vortex(show=True, save=False)
+    # stock.show_overview(show=True, save=False)
+    # stock.show_supply(show=False, save=True)
+    # stock.show_multiples(show=False, save=True)
+    # stock.show_basic(show=False, save=True)
+    # stock.show_bollinger(show=False, save=True)
+    # stock.show_rsi(show=False, save=True)
+    # stock.show_cost(show=False, save=True)
+    # stock.show_momentum(show=False, save=True)
+    # stock.show_overtrade(show=False, save=True)
+    # stock.show_vortex(show=True, save=False)

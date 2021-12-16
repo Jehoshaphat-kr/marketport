@@ -1,2 +1,1 @@
-from .traces import *
-from .chart import Chart
+from .chart import display

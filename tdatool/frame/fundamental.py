@@ -8,19 +8,30 @@ from urllib.request import urlopen
 
 
 today = datetime.today()
-class fetch:
+class finances:
 
-    def __init__(self, ticker:str):
+    def __init__(self, ticker:str, meta=None):
+        """
+        :param ticker: 종목코드
+        :param meta: DataFrame
+        """
+        super().__init__()
+
         # Parameter
         self.ticker = ticker
-        self.name = stock.get_market_ticker_name(ticker=ticker)
+        if type(meta) == type(pd.DataFrame()):
+            self.name = meta.loc[ticker, '종목명']
+        else:
+            self.name = stock.get_market_ticker_name(ticker=ticker)
+
         self.url1 = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
         self.url2 = "http://comp.fnguide.com/SVO2/ASP/SVD_Corp.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=&NewMenuID=102&stkGb=701"
 
         # Fetch CompanyGuide SnapShot
-        self.obj1 = pd.read_html(self.url1 % ticker, encoding='utf-8')
-        self.obj2 = pd.read_html(self.url2 % ticker, encoding='utf-8')
-        self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
+        self.obj1 = list()
+        self.obj2 = list()
+        self.is_initialized = False
+        self.is_separate = True
 
         # Initialize DataFrames
         self._multiples_ = pd.DataFrame()
@@ -31,6 +42,18 @@ class fetch:
         self._balance_ = pd.DataFrame()
         self._product_ = pd.DataFrame()
         self._rnd_ = pd.DataFrame()
+        return
+
+    def _init_object_(self):
+        """
+        초기 웹 데이터프레임 다운로드
+        :return:
+        """
+        if not self.is_initialized:
+            self.obj1 = pd.read_html(self.url1 % self.ticker, encoding='utf-8')
+            self.obj2 = pd.read_html(self.url2 % self.ticker, encoding='utf-8')
+            self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
+            self.is_initialized = True
         return
 
     @property
@@ -129,6 +152,7 @@ class fetch:
         연간 실적/비율/배수 데이터프레임
         :return:
         """
+        self._init_object_()
         df_copy = (self.obj1[14] if self.is_separate else self.obj1[11]).copy()
         cols = df_copy.columns.tolist()
         df_copy.set_index(keys=[cols[0]], inplace=True)
@@ -143,6 +167,7 @@ class fetch:
         분기 실적/비율/배수 데이터프레임
         :return:
         """
+        self._init_object_()
         df_copy = (self.obj1[15] if self.is_separate else self.obj1[12]).copy()
         cols = df_copy.columns.tolist()
         df_copy.set_index(keys=[cols[0]], inplace=True)
@@ -157,6 +182,7 @@ class fetch:
         주요 매출 상품:: [reform] 리폼 필요
         :return:
         """
+        self._init_object_()
         if self._product_.empty:
             df = self.obj2[2]
             df.set_index(keys='제품명', inplace=True)
@@ -173,6 +199,7 @@ class fetch:
         판관비 Sales, General and Administrative (SG & A) 데이터프레임
         :return:
         """
+        self._init_object_()
         df = self.obj2[4].copy()
         df.set_index(keys=['항목'], inplace=True)
         df.index.name = None
@@ -184,6 +211,7 @@ class fetch:
         매출 원가율 데이터프레임
         :return:
         """
+        self._init_object_()
         df = self.obj2[5].copy()
         df.set_index(keys=['항목'], inplace=True)
         df.index.name = None
@@ -195,6 +223,7 @@ class fetch:
         R&D 투자현황
         :return:
         """
+        self._init_object_()
         if self._rnd_.empty:
             df = self.obj2[8]
             df.set_index(keys=['회계연도'], inplace=True)
@@ -242,7 +271,7 @@ class fetch:
 
 
 if __name__ == "__main__":
-    api = fetch(ticker='005930')
+    api = finances(ticker='005930')
     print(api.name)
     # print("# 사업 소개")
     # print(api.summary)

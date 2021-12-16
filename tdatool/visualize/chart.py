@@ -1,10 +1,10 @@
 import os
-import tdatool as tt
-import pandas as pd
+import tdatool.visualize.traces as tt
 import plotly.graph_objects as go
 import plotly.offline as of
 from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from datetime import datetime
+from tdatool.frame import prices as stock
 
 
 def save_as(fig:go.Figure, filename:str):
@@ -23,9 +23,9 @@ def save_as(fig:go.Figure, filename:str):
     of.plot(fig, filename=os.path.join(root, filename), auto_open=False)
     return
 
-class Chart:
-    def __init__(self, obj):
-        self.obj = obj
+class display(stock):
+    def __init__(self, ticker: str = '005930', src: str = 'github', period: int = 5, meta = None):
+        super().__init__(ticker=ticker, src=src, period=period, meta=meta)
         return
 
     def layout_basic(self, title: str = '', x_title: str = '날짜', y_title: str = ''):
@@ -37,7 +37,7 @@ class Chart:
         :return:
         """
         return go.Layout(
-            title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : {title}',
+            title=f'<b>{self.name}[{self.ticker}]</b> : {title}',
             plot_bgcolor='white',
             annotations=[
                 dict(
@@ -75,29 +75,29 @@ class Chart:
         fig = make_subplots(rows=2, cols=1, row_width=[0.15, 0.85], shared_xaxes=True, vertical_spacing=0.05)
 
         # 주가 차트
-        for key, obj in tt.trace_price(df=self.obj.price):
+        for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
 
         # 볼린저 밴드
-        for key, obj in tt.trace_bollinger(df=self.obj.bollinger):
+        for key, obj in tt.trace_bollinger(df=self.bollinger):
             if key in ['상한선', '기준선', '하한선']:
                 fig.add_trace(obj, row=1, col=1)
 
         # 피벗 포인트
-        for key, obj in tt.trace_pivot(df=self.obj.pivot):
+        for key, obj in tt.trace_pivot(df=self.pivot):
             fig.add_trace(obj, row=1, col=1)
 
         # 추세선
-        for key, obj in tt.trace_trend(df=self.obj.trend):
+        for key, obj in tt.trace_trend(df=self.trend):
             fig.add_trace(obj, row=1, col=1)
 
         # 필터선
-        for key, obj in tt.trace_filters(df=self.obj.filters):
+        for key, obj in tt.trace_filters(df=self.filters):
             if key.startswith('SMA'):
                 fig.add_trace(obj, row=1, col=1)
 
         # 거래량
-        for key, obj in tt.trace_volume(df=self.obj.price, is_main=False):
+        for key, obj in tt.trace_volume(df=self.price, is_main=False):
             fig.add_trace(obj, row=2, col=1)
 
         layout = self.layout_basic(title='기본 분석 차트', x_title='', y_title='가격(KRW)')
@@ -110,7 +110,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-기본차트.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-기본차트.html")
         return fig
 
     def show_bollinger(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -122,11 +122,11 @@ class Chart:
         """
         fig = make_subplots(rows=3, cols=1, row_width=[0.15, 0.15, 0.7], shared_xaxes=True, vertical_spacing=0.05)
         # 주가 차트
-        for key, obj in tt.trace_price(df=self.obj.price):
+        for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
 
         # 볼린저 밴드 차트
-        for key, obj in tt.trace_bollinger(df=self.obj.bollinger):
+        for key, obj in tt.trace_bollinger(df=self.bollinger):
             if key in ['상한선', '기준선', '하한선', '상한지시', '하한지시']:
                 fig.add_trace(obj, row=1, col=1)
             elif key == '신호':
@@ -148,7 +148,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-볼린저밴드.html")
         return fig
 
     def show_momentum(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -164,20 +164,20 @@ class Chart:
         )
 
         # 주가 차트
-        for key, obj in tt.trace_price(df=self.obj.price):
+        for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
 
         # MACD
-        for key, obj in tt.trace_macd(df=self.obj.macd):
+        for key, obj in tt.trace_macd(df=self.macd):
             secondary_y = True if key.lower().endswith('hist') else False
             fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
 
         # RSI
-        for key, obj in tt.trace_rsi(df=self.obj.rsi):
+        for key, obj in tt.trace_rsi(df=self.rsi):
             fig.add_trace(obj, row=3, col=1)
 
         # STC
-        for key, obj in tt.trace_stc(df=self.obj.stc):
+        for key, obj in tt.trace_stc(df=self.stc):
             fig.add_trace(obj, row=4, col=1)
 
         # 레이아웃
@@ -192,7 +192,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-볼린저밴드.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-볼린저밴드.html")
         return fig
 
     def show_overtrade(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -205,19 +205,19 @@ class Chart:
         fig = make_subplots(rows=4, cols=1, row_width=[0.2, 0.2, 0.2, 0.4], shared_xaxes=True, vertical_spacing=0.04)
 
         # 주가 차트
-        for key, obj in tt.trace_price(df=self.obj.price):
+        for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
 
         # STOCHASTIC-RSI 차트
-        for key, obj in tt.trace_stoch_rsi(df=self.obj.stoch_rsi):
+        for key, obj in tt.trace_stoch_rsi(df=self.stoch_rsi):
             fig.add_trace(obj, row=2, col=1)
 
         # CCI 차트
-        for key, obj in tt.trace_cci(df=self.obj.cci):
+        for key, obj in tt.trace_cci(df=self.cci):
             fig.add_trace(obj, row=3, col=1)
 
         # TRIX 차트
-        for key, obj in tt.trace_trix(df=self.obj.trix):
+        for key, obj in tt.trace_trix(df=self.trix):
             fig.add_trace(obj, row=4, col=1)
 
         # 레이아웃
@@ -230,7 +230,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-RSI.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-RSI.html")
         return fig
 
     def show_vortex(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -243,11 +243,11 @@ class Chart:
         fig = make_subplots(rows=3, cols=1, row_width=[0.2, 0.2, 0.6], shared_xaxes=True, vertical_spacing=0.04)
 
         # 주가 차트
-        for key, obj in tt.trace_price(df=self.obj.price):
+        for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
 
         # Vortex
-        for key, obj in tt.trace_vortex(df=self.obj.vortex):
+        for key, obj in tt.trace_vortex(df=self.vortex):
             row = 3 if key.endswith('Diff') else 2
             fig.add_trace(obj, row=row, col=1)
 
@@ -261,7 +261,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-RSI.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-RSI.html")
         return fig
 
     def show_overview(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -278,23 +278,23 @@ class Chart:
         )
 
         # 제품 구성
-        for key, obj in tt.trace_product(df=self.obj.product):
+        for key, obj in tt.trace_product(df=self.product):
             fig.add_trace(obj, row=1, col=1)
 
         # 자산 현황
-        for key, obj in tt.trace_asset(df=self.obj.annual):
+        for key, obj in tt.trace_asset(df=self.annual):
             fig.add_trace(obj, row=1, col=2)
 
         # 연간 실적
-        for key, obj in tt.trace_sales(df=self.obj.annual):
+        for key, obj in tt.trace_sales(df=self.annual):
             fig.add_trace(obj, row=2, col=1)
 
         # 분기 실적
-        for key, obj in tt.trace_sales(df=self.obj.quarter, is_annual=False):
+        for key, obj in tt.trace_sales(df=self.quarter, is_annual=False):
             fig.add_trace(obj, row=2, col=2)
 
         fig.update_layout(dict(
-            title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 제품, 자산 및 실적',
+            title=f'<b>{self.name}[{self.ticker}]</b> : 제품, 자산 및 실적',
             plot_bgcolor='white',
             margin=dict(l=0)
         ))
@@ -305,7 +305,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-개요.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-개요.html")
         return fig
 
     def show_supply(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -323,27 +323,27 @@ class Chart:
         )
 
         # 컨센서스 차트
-        for key, obj in tt.trace_consensus(df=self.obj.consensus):
+        for key, obj in tt.trace_consensus(df=self.consensus):
             fig.add_trace(obj, row=1, col=1)
 
         # 외국인 보유비중 차트
-        for key, obj in tt.trace_foreigners(df=self.obj.foreigner):
+        for key, obj in tt.trace_foreigners(df=self.foreigner):
             secondary_y = True if key == '종가' else False
             fig.add_trace(obj, row=1, col=2, secondary_y=secondary_y)
 
         # 차입공매도 비중
-        for key, obj in tt.trace_shorts(df=self.obj.short):
+        for key, obj in tt.trace_shorts(df=self.short):
             secondary_y = True if key == '수정 종가' else False
             fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
 
         # 대차잔고 비중
-        for key, obj in tt.trace_balance(df=self.obj.balance):
+        for key, obj in tt.trace_balance(df=self.balance):
             secondary_y = True if key == '수정 종가' else False
             fig.add_trace(obj, row=2, col=2, secondary_y=secondary_y)
 
         # 레이아웃
         fig.update_layout(dict(
-            title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 수급 현황',
+            title=f'<b>{self.name}[{self.ticker}]</b> : 수급 현황',
             plot_bgcolor='white'
         ))
         fig.update_yaxes(title_text="주가[원]", showgrid=True, gridcolor='lightgrey', row=1, col=1)
@@ -354,7 +354,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-수급평가.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-수급평가.html")
         return fig
 
     def show_multiples(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -372,28 +372,28 @@ class Chart:
         )
 
         # PSR, 매출액
-        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['매출액', 'PSR']):
+        for key, obj in tt.trace_multiple(df=self.multiples, require=['매출액', 'PSR']):
             secondary_y = True if key == 'PSR' else False
             fig.add_trace(obj, row=1, col=1, secondary_y=secondary_y)
 
         # PER, EPS
-        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['EPS', 'PER']):
+        for key, obj in tt.trace_multiple(df=self.multiples, require=['EPS', 'PER']):
             secondary_y = True if key == 'PER' else False
             fig.add_trace(obj, row=1, col=2, secondary_y=secondary_y)
 
         # PBR, BPS
-        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['BPS', 'PBR']):
+        for key, obj in tt.trace_multiple(df=self.multiples, require=['BPS', 'PBR']):
             secondary_y = True if key == 'PBR' else False
             fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
 
         # DIV, DPS
-        for key, obj in tt.trace_multiple(df=self.obj.multiples, require=['DPS', 'DIV']):
+        for key, obj in tt.trace_multiple(df=self.multiples, require=['DPS', 'DIV']):
             secondary_y = True if key == 'DIV' else False
             fig.add_trace(obj, row=2, col=2, secondary_y=secondary_y)
 
         # 레이아웃
         fig.update_layout(dict(
-            title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 투자 배수',
+            title=f'<b>{self.name}[{self.ticker}]</b> : 투자 배수',
             plot_bgcolor='white'
         ))
         for row, col in ((1, 1), (1, 2), (2, 1), (2, 2)):
@@ -402,7 +402,7 @@ class Chart:
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-투자배수.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-투자배수.html")
         return fig
 
     def show_cost(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -420,54 +420,32 @@ class Chart:
         )
 
         # 매출원가
-        for key, obj in tt.trace_cost(df=self.obj.cost):
+        for key, obj in tt.trace_cost(df=self.cost):
             fig.add_trace(obj, row=1, col=1)
 
         # 판관비
-        for key, obj in tt.trace_sga(df=self.obj.sgna):
+        for key, obj in tt.trace_sga(df=self.sgna):
             fig.add_trace(obj, row=1, col=2)
 
         # R&D 투자비중
-        for key, obj in tt.trace_rnd(df=self.obj.rnd):
+        for key, obj in tt.trace_rnd(df=self.rnd):
             fig.add_trace(obj, row=2, col=1)
 
         # 부채비율
-        for key, obj in tt.trace_debt(df=self.obj.annual):
+        for key, obj in tt.trace_debt(df=self.annual):
             fig.add_trace(obj, row=2, col=2)
 
         # 레이아웃
-        fig.update_layout(dict(title=f'<b>{self.obj.name}[{self.obj.ticker}]</b> : 비용과 부채', plot_bgcolor='white'))
+        fig.update_layout(dict(title=f'<b>{self.name}[{self.ticker}]</b> : 비용과 부채', plot_bgcolor='white'))
         for row, col in ((1, 1), (1, 2), (2, 1), (2, 2)):
             fig.update_yaxes(title_text="비율[%]", showgrid=True, gridcolor='lightgrey', row=row, col=col)
 
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.obj.ticker}{self.obj.name}-지출비용.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-지출비용.html")
         return fig
-    
-    # def show_trend(self, show: bool = False, save: bool = False):
-    #     """
-    #     추세선 및 MACD
-    #     :param show:
-    #     :param save:
-    #     :return:
-    #     """
-    #     fig = make_subplots(rows=2, cols=1, row_width=[0.2, 0.8], shared_xaxes=True, vertical_spacing=0.05,
-    #                         specs=[[{"secondary_y": True}], [{"secondary_y": True}]])
-    #
-    #     # 종가 정보
-    #     price = self.obj.price['종가']
-    #     tic = price.index[0]
-    #     toc = price.index[-1]
-    #     fig.add_trace(go.Scatter(
-    #         x=price.index,
-    #         y=price,
-    #         meta=reform(span=price.index),
-    #         name='종가',
-    #         hovertemplate='날짜: %{meta}<br>종가: %{y:,}원<extra></extra>'
-    #     ), row=1, col=1, secondary_y=False)
-    #
+
     #     # 추세선
     #     point = self.obj.bend_point.copy()
     #     trend = self.obj.guidance.copy()
@@ -530,3 +508,18 @@ class Chart:
 #                 visible='legendonly' if n else True,
 #                 hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
 #             ), row=1, col=1)
+
+
+if __name__ == "__main__":
+    api = display()
+    # api.show_overview(show=False, save=True)
+    # api.show_supply(show=False, save=True)
+    # api.show_multiples(show=False, save=True)
+    # api.show_cost(show=False, save=True)
+
+    # api.show_basic(show=False, save=True)
+    # api.show_bollinger(show=False, save=True)
+    # api.show_rsi(show=False, save=True)
+    # api.show_momentum(show=False, save=True)
+    # api.show_overtrade(show=False, save=True)
+    api.show_vortex(show=True, save=False)

@@ -1,13 +1,10 @@
 import pandas as pd
-from tdatool.frame import prices, fundamentals
+from tdatool.visualize import display as stock
 
 
-class Evaluate(prices, fundamentals):
-
-    def __init__(self, ticker: str, src: str = 'github', period:int = 5):
-        prices.__init__(self, ticker=ticker, src=src, period=period)
-        fundamentals.__init__(self, ticker=ticker)
-        self.ticker = ticker
+class estimate(stock):
+    def __init__(self, ticker: str = '005930', src: str = 'github', period: int = 5, meta = None):
+        super().__init__(ticker=ticker, src=src, period=period, meta=meta)
 
         # Usage Frames
         self._performance_ = pd.DataFrame()
@@ -73,7 +70,7 @@ class Evaluate(prices, fundamentals):
         return round(data[-1]/data[0] - 1, 6)
 
 if __name__ == "__main__":
-    ev = Evaluate(ticker='006400')
+    ev = estimate(ticker='006400')
 
     # print(ev.performance)
     # print(ev.spectra)

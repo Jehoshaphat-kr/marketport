@@ -1,25 +1,70 @@
-import math
+import math, os
 import pandas as pd
 import numpy as np
-import tdatool.frame as frm
-from datetime import timedelta
-from pykrx import stock
+from datetime import datetime, timedelta
 from scipy.signal import butter, filtfilt
 from scipy.stats import linregress
 from ta import add_all_ta_features as lib
+from tdatool.frame import finances
+from findiff import FinDiff
 np.seterr(divide='ignore', invalid='ignore')
 
 
-class analytic:
+def get_extrema(h, accuracy=8):
+    """
+    Customized Pivot Detection
+    Originally from PyPI: trendln @https://github.com/GregoryMorse/trendln
+    """
+    dx = 1  # 1 day interval
+    d_dx = FinDiff(0, dx, 1, acc=accuracy)  # acc=3 #for 5-point stencil, currenly uses +/-1 day only
+    d2_dx2 = FinDiff(0, dx, 2, acc=accuracy)  # acc=3 #for 5-point stencil, currenly uses +/-1 day only
 
-    def __init__(self, ticker: str = '005930', src: str = 'git', period: int = 5):
+    def get_minmax(h):
+        clarr = np.asarray(h, dtype=np.float64)
+        mom, momacc = d_dx(clarr), d2_dx2(clarr)
 
-        # Parameter
-        self.ticker = ticker
-        self.name = stock.get_market_ticker_name(ticker=ticker)
+        def numdiff_extrema(func):
+            return [x for x in range(len(mom))
+                    if func(x) and
+                    (mom[
+                         x] == 0 or  # either slope is 0, or it crosses from positive to negative with the closer to 0 of the two chosen or prior if a tie
+                     (x != len(mom) - 1 and (
+                             mom[x] > 0 > mom[x + 1] and h[x] >= h[x + 1] or  # mom[x] >= -mom[x+1]
+                             mom[x] < 0 < mom[x + 1] and h[x] <= h[x + 1]) or  # -mom[x] >= mom[x+1]) or
+                      x != 0 and (mom[x - 1] > 0 > mom[x] and h[x - 1] < h[x] or  # mom[x-1] < -mom[x] or
+                                  mom[x - 1] < 0 < mom[x] and h[x - 1] > h[x])))]  # -mom[x-1] < mom[x])))]
+        return lambda x: momacc[x] > 0, lambda x: momacc[x] < 0, numdiff_extrema
+
+    minFunc, maxFunc, numdiff_extrema = get_minmax(h)
+    return numdiff_extrema(minFunc), numdiff_extrema(maxFunc)
+
+
+class prices(finances):
+
+    def __init__(self, ticker: str = '005930', src: str = 'github', period: int = 5, meta = None):
+        super().__init__(ticker=ticker, meta=meta)
 
         # Fetch Price
-        self.price = frm.fetch(ticker=ticker, src=src, period=period)
+        today = datetime.today()
+        start = today - timedelta((365 * period) + 180)
+        if src.lower() == 'local':
+            df = pd.read_csv(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), f'warehouse/series/{ticker}.csv'
+                ), encoding='utf-8', index_col='날짜'
+            )
+            df.index = pd.to_datetime(df.index)
+            self.price = df[df.index >= start]
+        elif src.lower().endswith('krx'):
+            from pykrx import stock
+            self.price = stock.get_market_ohlcv_by_date(start.strftime("%Y%m%d"), today.strftime("%Y%m%d"), ticker)
+        elif src.lower().endswith('github'):
+            master = 'https://raw.githubusercontent.com/Jehoshaphat-kr/marketport/master/warehouse/series'
+            df = pd.read_csv(f'{master}/{ticker}.csv', encoding='utf-8', index_col='날짜')
+            df.index = pd.to_datetime(df.index)
+            self.price = df[df.index >= start]
+        else:
+            raise KeyError(f'Key Error: Not Possible argument for src = {src}. Must be local/pykrx/github')
         self.__fillz__()
 
         # Technical Analysis
@@ -128,7 +173,7 @@ class analytic:
         )
 
     @property
-    def stc(self) -> pd.DataFrame:
+    def stc(self) -> pd.Series:
         """
         STC: Schaff Trend Cycle 데이터프레임
         :return:
@@ -138,7 +183,7 @@ class analytic:
         return sr
 
     @property
-    def cci(self) -> pd.DataFrame:
+    def cci(self) -> pd.Series:
         """
         CCI: Commodity Channel Index 데이터프레임
         :return:
@@ -158,7 +203,7 @@ class analytic:
         return sr
 
     @property
-    def rsi(self) -> pd.DataFrame:
+    def rsi(self) -> pd.Series:
         """
         RSI: Relative Strength Index 데이터프레임
         :return:
@@ -232,11 +277,11 @@ class analytic:
             price = self.price[self.price.index >= (self.price.index[-1] - timedelta(365))].copy()
             span = price.index
 
-            dump, upper = frm.get_extrema(h=price['고가'])
+            dump, upper = get_extrema(h=price['고가'])
             upper_index = [span[n] for n in upper]
             upper_pivot = price[span.isin(upper_index)]['고가']
 
-            lower, dump = frm.get_extrema(h=price['저가'])
+            lower, dump = get_extrema(h=price['저가'])
             lower_index = [span[n] for n in lower]
             lower_pivot = price[span.isin(lower_index)]['저가']
             self._pivot_ = pd.concat(objs={'고점':upper_pivot, '저점':lower_pivot}, axis=1)
@@ -302,7 +347,7 @@ class analytic:
 
         if self._trend_.empty:
             objs = []
-            gaps = [('1Y', 365), ('6M', 183), ('3M', 91), ('1M', 21)]
+            gaps = [('1Y', 365), ('6M', 183), ('3M', 91), ('2M', 42)]
             for period, days in gaps:
                 on = self.price.index[-1] - timedelta(days)
                 frm_price = self.price[self.price.index >= on].copy()
@@ -317,7 +362,8 @@ class analytic:
 
 
 if __name__ == "__main__":
-    api = analytic(ticker='006400', src='local')
+    api = prices(ticker='007070', src='local')
+    print(api.name)
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)
