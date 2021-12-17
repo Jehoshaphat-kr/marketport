@@ -58,20 +58,22 @@ class estimate(stock):
             self._spectra_ = pd.concat(objs=data, axis=1)
         return self._spectra_
 
-    def trend_scalar(self, period:str='3M', kind:str='avg'):
+    @property
+    def trend_strength(self) -> pd.DataFrame:
         """
         추세선 강도
-        :param period: 기간 - 1Y/6M/3M/1M
-        :param kind: avg 또는 그 외
         :return:
         """
-        key = period + ('평균' if kind.lower().startswith('avg') else '표준') + '지지선'
-        data = self.trend[key].dropna().values
-        return round(data[-1]/data[0] - 1, 6)
+        cols = self.trend.columns
+        data = {}
+        for col in cols:
+            _part = self.trend[col].dropna()
+            data[col[:-1]] = 100 * round(_part[-1]/_part[0]-1, 6)
+        return pd.DataFrame(data=data, index=[self.ticker])
 
 if __name__ == "__main__":
     ev = estimate(ticker='006400')
 
     # print(ev.performance)
     # print(ev.spectra)
-    print(ev.trend_scalar())
+    print(ev.trend_strength)

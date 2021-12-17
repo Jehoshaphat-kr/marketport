@@ -258,12 +258,15 @@ class finances:
 
             sales = self.annual[key].dropna()
             sales = sales[~sales.index.str.endswith(')')]
-            sales = sales.append(to_append=pd.Series(data={f'{today.year}/12': 4 * q_sales.sum() / len(q_sales)}))
+            sales = sales.append(to_append=pd.Series(data={f'{today.year}/12': int(4 * q_sales.sum() / len(q_sales))}))
             sales.index = sales.index + '/30'
             sales.index = pd.to_datetime(sales.index)
             sales.name = key
+            sales = sales.astype(float)
+            sales = sales[sales.index >= marketcap.index[0]]
+
             multiples = pd.concat(objs=[sales, marketcap], axis=1)[[key, '시가총액']]
-            multiples['매출액'] = multiples[key].interpolate(method='nearest').astype(int)
+            multiples['매출액'] = multiples[key].interpolate(method='nearest')
             multiples['시가총액'] = multiples['시가총액']/100000000
             multiples['PSR'] = multiples['시가총액'] / multiples[key]
             self._multiples_ = multiples.join(ratio).dropna()
@@ -271,14 +274,16 @@ class finances:
 
 
 if __name__ == "__main__":
-    api = finances(ticker='005930')
+    api = finances(ticker='151910')
+    # api = finances(ticker='000660')
     print(api.name)
     # print("# 사업 소개")
     # print(api.summary)
 
     # print("# 연간 실적")
-    print(api.annual)
-    print(api.annual['부채비율'])
+    # print(api.annual)
+    # print(api.annual['매출액'])
+
     # print("# 분기 실적")
     # print(api.quarter)
     
@@ -296,4 +301,4 @@ if __name__ == "__main__":
     # print(api.sgna)
     # print(api.cost)
     # print(api.rnd)
-    # print(api.multiples)
+    print(api.multiples)

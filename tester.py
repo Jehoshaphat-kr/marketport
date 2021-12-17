@@ -11,7 +11,7 @@ if __name__ == "__main__":
     # ticker = '207940' # 삼성바이오로직스
     # ticker = '005380' # 현대차
     # ticker = '243840' # 신흥에스이씨
-    ticker = '007070'
+    ticker = '151910'
 
     meta = tt.metadata().market_data
 
@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     # stock.show_overview(show=True, save=False)
     # stock.show_supply(show=False, save=True)
-    # stock.show_multiples(show=False, save=True)
+    stock.show_multiples(show=False, save=True)
     # stock.show_basic(show=False, save=True)
     # stock.show_bollinger(show=False, save=True)
     # stock.show_rsi(show=False, save=True)
