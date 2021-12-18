@@ -15,14 +15,9 @@ class finances:
         :param ticker: 종목코드
         :param meta: DataFrame
         """
-        super().__init__()
-
         # Parameter
         self.ticker = ticker
-        if type(meta) == type(pd.DataFrame()):
-            self.name = meta.loc[ticker, '종목명']
-        else:
-            self.name = stock.get_market_ticker_name(ticker=ticker)
+        self.name = meta.loc[ticker, '종목명'] if type(meta) == type(pd.DataFrame()) else stock.get_market_ticker_name(ticker=ticker)
 
         self.url1 = "http://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=D&NewMenuID=Y&stkGb=701"
         self.url2 = "http://comp.fnguide.com/SVO2/ASP/SVD_Corp.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=&NewMenuID=102&stkGb=701"
@@ -30,17 +25,19 @@ class finances:
         # Fetch CompanyGuide SnapShot
         self.obj1 = list()
         self.obj2 = list()
-        self.is_initialized = False
-        self.is_separate = True
+        self.is_init = False
+        self.is_link = True
 
         # Initialize DataFrames
         self._multiples_ = pd.DataFrame()
         self._foreigner_ = pd.DataFrame()
         self._consensus_ = pd.DataFrame()
-        self._factors_ = pd.DataFrame()
-        self._shorts_ = pd.DataFrame()
+        self._relmulti_ = pd.DataFrame()
+        self._relyield_ = pd.DataFrame()
         self._balance_ = pd.DataFrame()
         self._product_ = pd.DataFrame()
+        self._factors_ = pd.DataFrame()
+        self._shorts_ = pd.DataFrame()
         self._rnd_ = pd.DataFrame()
         return
 
@@ -49,11 +46,11 @@ class finances:
         초기 웹 데이터프레임 다운로드
         :return:
         """
-        if not self.is_initialized:
+        if not self.is_init:
             self.obj1 = pd.read_html(self.url1 % self.ticker, encoding='utf-8')
             self.obj2 = pd.read_html(self.url2 % self.ticker, encoding='utf-8')
-            self.is_separate = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
-            self.is_initialized = True
+            self.is_link = self.obj1[11].iloc[0].isnull().sum() > self.obj1[14].iloc[0].isnull().sum()
+            self.is_init = True
         return
 
     @property
@@ -84,6 +81,51 @@ class finances:
                 columns=dict(zip(['NM', 'VAL1', 'VAL2'], ['팩터'] + header))
             ).set_index(keys='팩터')
         return self._factors_
+
+    @property
+    def relyield(self) -> pd.DataFrame:
+        """
+        상대수익률 (3M, 1Y)
+        :return:
+        """
+        if self._relyield_.empty:
+            objs = {}
+            for period in ['1Y', '3M']:
+                url = f"http://cdn.fnguide.com/SVO2/json/chart/01_01/chart_A{self.ticker}_{period}.json"
+                data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+                header = pd.DataFrame(data["CHART_H"])[['ID', 'PREF_NAME']]
+                header = header[header['PREF_NAME'] != ""]
+                inner = pd.DataFrame(data["CHART"])[
+                    ['TRD_DT'] + header['ID'].tolist()
+                ].set_index(keys='TRD_DT').rename(columns=header.set_index(keys='ID').to_dict()['PREF_NAME'])
+                inner.index = pd.to_datetime(inner.index)
+                objs[period] = inner
+            self._relyield_ = pd.concat(objs=objs, axis=1)
+        return self._relyield_
+
+    @property
+    def relmultiple(self) -> pd.DataFrame:
+        """
+        상대 배수(Multiple)
+        :return:
+        """
+        if self._relmulti_.empty:
+            url = f"http://cdn.fnguide.com/SVO2/json/chart/01_04/chart_A{self.ticker}_D.json"
+            data = json.loads(urlopen(url).read().decode('utf-8-sig', 'replace'))
+            objs = {}
+            for label, index in (('PER', '02'), ('EV/EBITA', '03')):
+                header1 = pd.DataFrame(data[f'{index}_H'])[['ID', 'NAME']].set_index(keys='ID')
+                header1['NAME'] = header1['NAME'].astype(str).str.replace("'", "20")
+                header1 = header1.to_dict()['NAME']
+                header1.update({'CD_NM':'이름'})
+
+                inner1 = pd.DataFrame(data[index])[list(header1.keys())].rename(columns=header1).set_index(keys='이름')
+                inner1.index.name = None
+                for col in inner1.columns:
+                    inner1[col] = inner1[col].apply(lambda x: np.nan if x == '-' else x)
+                objs[label] = inner1.T
+            self._relmulti_ = pd.concat(objs=objs, axis=1)
+        return self._relmulti_
 
     @property
     def foreigner(self) -> pd.DataFrame:
@@ -153,7 +195,7 @@ class finances:
         :return:
         """
         self._init_object_()
-        df_copy = (self.obj1[14] if self.is_separate else self.obj1[11]).copy()
+        df_copy = (self.obj1[14] if self.is_link else self.obj1[11]).copy()
         cols = df_copy.columns.tolist()
         df_copy.set_index(keys=[cols[0]], inplace=True)
         df_copy.index.name = None
@@ -168,7 +210,7 @@ class finances:
         :return:
         """
         self._init_object_()
-        df_copy = (self.obj1[15] if self.is_separate else self.obj1[12]).copy()
+        df_copy = (self.obj1[15] if self.is_link else self.obj1[12]).copy()
         cols = df_copy.columns.tolist()
         df_copy.set_index(keys=[cols[0]], inplace=True)
         df_copy.index.name = None
@@ -301,4 +343,6 @@ if __name__ == "__main__":
     # print(api.sgna)
     # print(api.cost)
     # print(api.rnd)
-    print(api.multiples)
+    # print(api.multiples)
+    # print(api.relyield)
+    print(api.relmultiple)

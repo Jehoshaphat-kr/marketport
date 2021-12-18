@@ -77,25 +77,20 @@ class display(stock):
         # 주가 차트
         for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
-
         # 볼린저 밴드
         for key, obj in tt.trace_bollinger(df=self.bollinger):
             if key in ['상한선', '기준선', '하한선']:
                 fig.add_trace(obj, row=1, col=1)
-
         # 피벗 포인트
         for key, obj in tt.trace_pivot(df=self.pivot):
             fig.add_trace(obj, row=1, col=1)
-
         # 추세선
         for key, obj in tt.trace_trend(df=self.trend):
             fig.add_trace(obj, row=1, col=1)
-
         # 필터선
         for key, obj in tt.trace_filters(df=self.filters):
             if key.startswith('SMA'):
                 fig.add_trace(obj, row=1, col=1)
-
         # 거래량
         for key, obj in tt.trace_volume(df=self.price, is_main=False):
             fig.add_trace(obj, row=2, col=1)
@@ -166,16 +161,13 @@ class display(stock):
         # 주가 차트
         for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
-
         # MACD
         for key, obj in tt.trace_macd(df=self.macd):
             secondary_y = True if key.lower().endswith('hist') else False
             fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
-
-        # RSI
-        for key, obj in tt.trace_rsi(df=self.rsi):
+        # TRIX 차트
+        for key, obj in tt.trace_trix(df=self.trix):
             fig.add_trace(obj, row=3, col=1)
-
         # STC
         for key, obj in tt.trace_stc(df=self.stc):
             fig.add_trace(obj, row=4, col=1)
@@ -183,7 +175,7 @@ class display(stock):
         # 레이아웃
         layout = self.layout_basic(title='모멘텀', x_title='', y_title='가격(KRW)')
         fig.update_layout(layout)
-        for label, row, col in (('MACD', 2, 1), ('RSI', 3, 1), ('STC', 4, 1)):
+        for label, row, col in (('MACD', 2, 1), ('TRIX', 3, 1), ('STC', 4, 1)):
             fig.update_xaxes(showgrid=True, gridcolor='lightgrey', showticklabels=True, row=row, col=col)
             fig.update_yaxes(title_text=label, showgrid=True, gridcolor='lightgrey', showticklabels=True,
                              row=row, col=col, secondary_y=False)
@@ -207,23 +199,20 @@ class display(stock):
         # 주가 차트
         for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
-
+        # RSI
+        for key, obj in tt.trace_rsi(df=self.rsi):
+            fig.add_trace(obj, row=2, col=1)
         # STOCHASTIC-RSI 차트
         for key, obj in tt.trace_stoch_rsi(df=self.stoch_rsi):
-            fig.add_trace(obj, row=2, col=1)
-
+            fig.add_trace(obj, row=3, col=1)
         # CCI 차트
         for key, obj in tt.trace_cci(df=self.cci):
-            fig.add_trace(obj, row=3, col=1)
-
-        # TRIX 차트
-        for key, obj in tt.trace_trix(df=self.trix):
             fig.add_trace(obj, row=4, col=1)
 
         # 레이아웃
         layout = self.layout_basic(title='과매수/매도 지표', x_title='', y_title='가격(KRW)')
         fig.update_layout(layout)
-        for label, row, col in (('Stochastic RSI', 2, 1), ('CCI', 3, 1), ('TRIX', 4, 1)):
+        for label, row, col in (('RSI', 2, 1), ('Stochastic RSI', 3, 1), ('CCI', 4, 1)):
             fig.update_xaxes(showgrid=True, gridcolor='lightgrey', showticklabels=True, row=row, col=col)
             fig.update_yaxes(title_text=label, showgrid=True, gridcolor='lightgrey', showticklabels=True,
                              row=row, col=col, secondary_y=False)
@@ -245,7 +234,6 @@ class display(stock):
         # 주가 차트
         for key, obj in tt.trace_price(df=self.price):
             fig.add_trace(obj, row=1, col=1)
-
         # Vortex
         for key, obj in tt.trace_vortex(df=self.vortex):
             row = 3 if key.endswith('Diff') else 2
@@ -280,15 +268,12 @@ class display(stock):
         # 제품 구성
         for key, obj in tt.trace_product(df=self.product):
             fig.add_trace(obj, row=1, col=1)
-
         # 자산 현황
         for key, obj in tt.trace_asset(df=self.annual):
             fig.add_trace(obj, row=1, col=2)
-
         # 연간 실적
         for key, obj in tt.trace_sales(df=self.annual):
             fig.add_trace(obj, row=2, col=1)
-
         # 분기 실적
         for key, obj in tt.trace_sales(df=self.quarter, is_annual=False):
             fig.add_trace(obj, row=2, col=2)
@@ -308,6 +293,49 @@ class display(stock):
             save_as(fig=fig, filename=f"{self.ticker}{self.name}-개요.html")
         return fig
 
+    def show_relative(self, show: bool=False, save: bool=False) -> go.Figure:
+        """
+        상대지표(By Company Guide)
+        :param show:
+        :param save:
+        :return:
+        """
+        fig = make_subplots(
+            rows=2, cols=2, vertical_spacing=0.12, horizontal_spacing=0.1,
+            subplot_titles=("", "상대 수익률", "PER 비교", "EV/EBITA 비교"),
+            specs=[[{"type": "polar"}, {"type": "xy"}], [{"type": "bar"}, {"type": "bar"}]]
+        )
+
+        # 멀티팩터
+        for key, obj in tt.trace_factors(df=self.factors):
+            fig.add_trace(obj, row=1, col=1)
+        # 상대수익률
+        for key, obj in tt.trace_relyield(df=self.relyield):
+            fig.add_trace(obj, row=1, col=2)
+        # 상대배수
+        for key, obj in tt.trace_relmultiple(df=self.relmultiple):
+            col = 1 if key.endswith('(PER)') else 2
+            fig.add_trace(obj, row=2, col=col)
+
+        # 레이아웃
+        fig.update_layout(dict(
+            title=f'<b>{self.name}[{self.ticker}]</b> : 시장 상대 지표',
+            plot_bgcolor='white',
+        ))
+        fig.update_yaxes(title_text="%", gridcolor='lightgrey', row=1, col=2)
+        fig.update_xaxes(gridcolor='lightgrey', row=1, col=2)
+        fig.update_yaxes(title_text="PER[-]", gridcolor='lightgrey', row=2, col=1)
+        fig.update_xaxes(title_text="년도", row=2, col=1)
+        fig.update_yaxes(title_text="EV/EBITA[-]", gridcolor='lightgrey', row=2, col=2)
+        fig.update_xaxes(title_text="년도", row=2, col=2)
+
+        if show:
+            fig.show()
+        if save:
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-상대지표.html")
+        return fig
+
+
     def show_supply(self, show: bool = False, save: bool = False) -> go.Figure:
         """
         수급 현황
@@ -325,17 +353,14 @@ class display(stock):
         # 컨센서스 차트
         for key, obj in tt.trace_consensus(df=self.consensus):
             fig.add_trace(obj, row=1, col=1)
-
         # 외국인 보유비중 차트
         for key, obj in tt.trace_foreigners(df=self.foreigner):
             secondary_y = True if key == '종가' else False
             fig.add_trace(obj, row=1, col=2, secondary_y=secondary_y)
-
         # 차입공매도 비중
         for key, obj in tt.trace_shorts(df=self.short):
             secondary_y = True if key == '수정 종가' else False
             fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
-
         # 대차잔고 비중
         for key, obj in tt.trace_balance(df=self.balance):
             secondary_y = True if key == '수정 종가' else False
@@ -375,17 +400,14 @@ class display(stock):
         for key, obj in tt.trace_multiple(df=self.multiples, require=['매출액', 'PSR']):
             secondary_y = True if key == 'PSR' else False
             fig.add_trace(obj, row=1, col=1, secondary_y=secondary_y)
-
         # PER, EPS
         for key, obj in tt.trace_multiple(df=self.multiples, require=['EPS', 'PER']):
             secondary_y = True if key == 'PER' else False
             fig.add_trace(obj, row=1, col=2, secondary_y=secondary_y)
-
         # PBR, BPS
         for key, obj in tt.trace_multiple(df=self.multiples, require=['BPS', 'PBR']):
             secondary_y = True if key == 'PBR' else False
             fig.add_trace(obj, row=2, col=1, secondary_y=secondary_y)
-
         # DIV, DPS
         for key, obj in tt.trace_multiple(df=self.multiples, require=['DPS', 'DIV']):
             secondary_y = True if key == 'DIV' else False
@@ -422,15 +444,12 @@ class display(stock):
         # 매출원가
         for key, obj in tt.trace_cost(df=self.cost):
             fig.add_trace(obj, row=1, col=1)
-
         # 판관비
         for key, obj in tt.trace_sga(df=self.sgna):
             fig.add_trace(obj, row=1, col=2)
-
         # R&D 투자비중
         for key, obj in tt.trace_rnd(df=self.rnd):
             fig.add_trace(obj, row=2, col=1)
-
         # 부채비율
         for key, obj in tt.trace_debt(df=self.annual):
             fig.add_trace(obj, row=2, col=2)
@@ -514,12 +533,12 @@ if __name__ == "__main__":
     api = display()
     # api.show_overview(show=False, save=True)
     # api.show_supply(show=False, save=True)
+    api.show_relative(show=True, save=False)
     # api.show_multiples(show=False, save=True)
     # api.show_cost(show=False, save=True)
 
     # api.show_basic(show=False, save=True)
     # api.show_bollinger(show=False, save=True)
-    # api.show_rsi(show=False, save=True)
-    # api.show_momentum(show=False, save=True)
-    # api.show_overtrade(show=False, save=True)
-    api.show_vortex(show=True, save=False)
+    # api.show_momentum(show=True, save=False)
+    # api.show_overtrade(show=True, save=False)
+    # api.show_vortex(show=True, save=False)

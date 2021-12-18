@@ -216,21 +216,22 @@ def trace_stoch_rsi(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
     if not len([x for x in require if x in columns]) == len(require):
         raise KeyError(f'argument not sufficient for pivot data')
 
-    meta = reform(span=df.index)
     objects = dict()
+    for n, label in enumerate(['upper', 'lower']):
+        objects[label] = go.Scatter(
+            name='STOCH-RSI-Range', x=df.index, y=[20 if n else 80] * len(df),
+            mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
+            visible=True, showlegend=True if n else False, legendgroup='Range',
+            hoverinfo='skip'
+        )
+
+    meta = reform(span=df.index)
     for n, col in enumerate(df.columns):
         objects[col] = go.Scatter(
             name=col, x=df.index, y=df[col],
             visible=True, showlegend=True,
             meta=meta,
             hovertemplate='날짜: %{meta}<br>' + col + ': %{y:.2f}<extra></extra>'
-        )
-    for n, label in enumerate(['upper', 'lower']):
-        objects[label] = go.Scatter(
-            name='RSI(S)-Range', x=df.index, y=[20 if n else 80] * len(df),
-            mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
-            visible=True, showlegend=True if n else False, legendgroup='Range',
-            hoverinfo='skip'
         )
     return objects.items()
 
@@ -244,12 +245,6 @@ def trace_cci(df:pd.Series) -> ItemsView[str, go.Scatter]:
         raise KeyError('argument not sufficient for ccir data')
 
     objects = dict()
-    objects['CCI'] = go.Scatter(
-        name='CCI', x=df.index, y=df,
-        visible=True, showlegend=True,
-        meta=reform(span=df.index),
-        hovertemplate='날짜: %{meta}<br>CCI: %{y:.2f}<extra></extra>'
-    )
     for n, label in enumerate(['upper', 'lower']):
         objects[label] = go.Scatter(
             name='CCI-Range', x=df.index, y=[-100 if n else 100] * len(df),
@@ -264,6 +259,12 @@ def trace_cci(df:pd.Series) -> ItemsView[str, go.Scatter]:
             visible=True, showlegend=False,
             hoverinfo='skip'
         )
+    objects['CCI'] = go.Scatter(
+        name='CCI', x=df.index, y=df,
+        visible=True, showlegend=True,
+        meta=reform(span=df.index),
+        hovertemplate='날짜: %{meta}<br>CCI: %{y:.2f}<extra></extra>'
+    )
     return objects.items()
 
 def trace_trix(df:pd.Series) -> ItemsView[str, go.Scatter]:
@@ -572,6 +573,44 @@ def trace_factors(df:pd.DataFrame) -> ItemsView[str, go.Scatterpolar]:
             visible='legendonly' if n else True, showlegend=True,
             hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
         )
+    return objects.items()
+
+def trace_relyield(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
+    """
+    Company Guide 상대 수익률 차트 요소
+    :param df: 상대수익률 데이터프레임
+    :return:
+    """
+    objects = dict()
+    for n, period in enumerate(['3M', '1Y']):
+        re_df = df[period].dropna()
+        meta = reform(span=re_df.index)
+        for m, col in enumerate(re_df.columns):
+            objects[f'{col}({period})'] = go.Scatter(
+                name=f'{col}({period})', x=re_df.index, y=re_df[col].astype(float),
+                visible='legendonly' if n else True, showlegend=True, legendgroup=period,
+                meta=meta,
+                hovertemplate=col + '<br>날짜: %{meta}<br>수익률: %{y}%<extra></extra>'
+            )
+    return objects.items()
+
+def trace_relmultiple(df:pd.DataFrame) -> ItemsView[str, go.Bar]:
+    """
+    Company Guide 상대 배수(Multiple) 차트 요소
+    :param df: 상대 배수 데이터프레임
+    :return:
+    """
+    objects = dict()
+    for n, ind in enumerate(['PER', 'EV/EBITA']):
+        re_df = df[ind]
+        for m, col in enumerate(re_df.columns):
+            objects[f'{col}({ind})'] = go.Bar(
+                name=f'{col}({ind})', x=re_df.index, y=re_df[col].astype(float),
+                marker=dict(color=colors[m]), opacity=0.9,
+                visible=True, showlegend=True,
+                text=re_df[col], textposition='auto', texttemplate=col.replace(' ','<br>') + '<br>%{text}',
+                hoverinfo='skip'
+            )
     return objects.items()
 
 def trace_consensus(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:

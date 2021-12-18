@@ -15,28 +15,29 @@ def get_extrema(h, accuracy=8):
     Customized Pivot Detection
     Originally from PyPI: trendln @https://github.com/GregoryMorse/trendln
     """
-    dx = 1  # 1 day interval
-    d_dx = FinDiff(0, dx, 1, acc=accuracy)  # acc=3 #for 5-point stencil, currenly uses +/-1 day only
-    d2_dx2 = FinDiff(0, dx, 2, acc=accuracy)  # acc=3 #for 5-point stencil, currenly uses +/-1 day only
+    dx = 1
+    d_dx, d2_dx2 = FinDiff(0, dx, 1, acc=accuracy), FinDiff(0, dx, 2, acc=accuracy)
+    def get_peak(h):
+        arr = np.asarray(h, dtype=np.float64)
+        mom, momacc = d_dx(arr), d2_dx2(arr)
 
-    def get_minmax(h):
-        clarr = np.asarray(h, dtype=np.float64)
-        mom, momacc = d_dx(clarr), d2_dx2(clarr)
+        def _diff_extrema_(func):
+            return [
+                x for x in range(len(mom)) if func(x) and (
+                    mom[x] == 0 or
+                    (
+                        x != len(mom) - 1 and (
+                            mom[x] > 0 > mom[x + 1] and h[x] >= h[x + 1] or mom[x] < 0 < mom[x + 1] and h[x] <= h[x + 1]
+                        ) or x != 0 and (
+                            mom[x - 1] > 0 > mom[x] and h[x - 1] < h[x] or mom[x - 1] < 0 < mom[x] and h[x - 1] > h[x]
+                        )
+                    )
+                )
+            ]
+        return lambda x: momacc[x] > 0, lambda x: momacc[x] < 0, _diff_extrema_
 
-        def numdiff_extrema(func):
-            return [x for x in range(len(mom))
-                    if func(x) and
-                    (mom[
-                         x] == 0 or  # either slope is 0, or it crosses from positive to negative with the closer to 0 of the two chosen or prior if a tie
-                     (x != len(mom) - 1 and (
-                             mom[x] > 0 > mom[x + 1] and h[x] >= h[x + 1] or  # mom[x] >= -mom[x+1]
-                             mom[x] < 0 < mom[x + 1] and h[x] <= h[x + 1]) or  # -mom[x] >= mom[x+1]) or
-                      x != 0 and (mom[x - 1] > 0 > mom[x] and h[x - 1] < h[x] or  # mom[x-1] < -mom[x] or
-                                  mom[x - 1] < 0 < mom[x] and h[x - 1] > h[x])))]  # -mom[x-1] < mom[x])))]
-        return lambda x: momacc[x] > 0, lambda x: momacc[x] < 0, numdiff_extrema
-
-    minFunc, maxFunc, numdiff_extrema = get_minmax(h)
-    return numdiff_extrema(minFunc), numdiff_extrema(maxFunc)
+    minFunc, maxFunc, diff_extrema = get_peak(h)
+    return diff_extrema(minFunc), diff_extrema(maxFunc)
 
 
 class prices(finances):
