@@ -64,7 +64,7 @@ class finances:
         texts = soup.find('ul', id='bizSummaryContent').find_all('li')
         text = '\n\n '.join([text.text for text in texts])
         return ' ' + text[0] + ''.join([
-            '.\n' if text[n] == '.' and not text[n - 1].isdigit() else text[n] for n in range(1, len(text) - 1)
+            '.\n' if text[n] == '.' and (not text[n-1].isdigit() or not text[n-1].isalpha()) else text[n] for n in range(1, len(text) - 1)
         ])
 
     @property

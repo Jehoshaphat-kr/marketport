@@ -122,7 +122,7 @@ class dock:
                     continue
                 data.to_csv(os.path.join(self.dir_storage, '{}.csv'.format(ticker)), encoding='utf-8', index=False)
                 if not (n+1) % 12:
-                    time.sleep(3)
+                    time.sleep(1)
 
             # 기존 다운로드 이력이 있는 경우 업데이트
             else:
