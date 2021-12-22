@@ -6,32 +6,35 @@ class estimate(stock):
     def __init__(self, ticker: str = '005930', src: str = 'github', period: int = 5, meta = None):
         super().__init__(ticker=ticker, src=src, period=period, meta=meta)
 
+        self._ack_perform_ = []
+
         # Usage Frames
+        self._achieve_ = pd.DataFrame(index=self.price.index)
         self._performance_ = pd.DataFrame()
         self._spectra_ = pd.DataFrame()
         return
 
-    @property
-    def performance(self) -> pd.DataFrame:
+    def achieve(self, trade_days:int=20, target_yield:float=5.0) -> pd.DataFrame:
         """
         주가 흐름(정답지)별 수익률 달성 여부
         :return:
         """
-        if self._performance_.empty:
+        key = f'{round(target_yield, 1)}Y_{trade_days}TD'
+        if not key in self._ack_perform_:
             calc = self.price[['시가', '저가', '고가', '종가']].copy()
-
-            data = {'ACH': [False] * len(calc), 'DUE': [-1] * len(calc)}
-            for i, date in enumerate(calc.index[:-21]):
-                p_span = calc[i+1:i+21].values.flatten()
+            data = {f'ACH_{key}': [False] * len(calc), f'LEN_{key}': [-1] * len(calc)}
+            for i, date in enumerate(calc.index[:-(trade_days + 1)]):
+                p_span = calc[i + 1: i + (trade_days + 1)].values.flatten()
                 if p_span[0] == 0: continue
 
                 for n, p in enumerate(p_span):
-                    if 100 * (p/p_span[0] - 1) >= 5.0:
-                        data['ACH'][i] = True
-                        data['DUE'][i] = n // 4
+                    if 100 * (p / p_span[0] - 1) >= target_yield:
+                        data[f'ACH_{key}'][i] = True
+                        data[f'LEN_{key}'][i] = n // 4
                         break
-            self._performance_ = pd.DataFrame(data=data, index=calc.index)
-        return self._performance_
+            self._achieve_ = self._achieve_.join(pd.DataFrame(data=data, index=calc.index), how='left')
+            self._ack_perform_.append(key)
+        return self._achieve_[[f'ACH_{key}', f'LEN_{key}']].copy()
 
     @property
     def spectra(self):
@@ -71,9 +74,28 @@ class estimate(stock):
             data[col[:-1]] = 100 * round(_part[-1]/_part[0]-1, 6)
         return pd.DataFrame(data=data, index=[self.ticker])
 
-if __name__ == "__main__":
-    ev = estimate(ticker='006400')
+    @property
+    def bollinger_width(self):
+        """
+        볼린저 밴드 10거래일 평균 폭 대비 최근 폭 오차
+        :return:
+        """
+        width = self.bollinger['밴드폭'].values
+        return 100 * (width[-1]/width[-10:].mean() - 1)
 
-    # print(ev.performance)
+    @property
+    def bollinger_low(self):
+        """
+        볼린저 밴드 5거래일 하한선 대비 일봉 오차
+        :return:
+        """
+        df = self.price.join(self.bollinger, how='left')
+        calc = (df['종가'] - df['하한선']).values
+        return 100 * (calc[-1] / calc[-5:].mean() - 1)
+
+if __name__ == "__main__":
+    ev = estimate(ticker='006400', src='local')
+
+    print(ev.achieve())
     # print(ev.spectra)
-    print(ev.trend_strength)
+    # print(ev.trend_strength)
