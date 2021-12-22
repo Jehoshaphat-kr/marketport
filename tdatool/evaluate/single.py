@@ -62,7 +62,7 @@ class estimate(stock):
         return self._spectra_
 
     @property
-    def trend_strength(self) -> pd.DataFrame:
+    def trend_strength(self) -> dict:
         """
         추세선 강도
         :return:
@@ -72,30 +72,30 @@ class estimate(stock):
         for col in cols:
             _part = self.trend[col].dropna()
             data[col[:-1]] = 100 * round(_part[-1]/_part[0]-1, 6)
-        return pd.DataFrame(data=data, index=[self.ticker])
+        return data
 
     @property
-    def bollinger_width(self):
+    def bollinger_width(self) -> dict:
         """
         볼린저 밴드 10거래일 평균 폭 대비 최근 폭 오차
         :return:
         """
         width = self.bollinger['밴드폭'].values
-        return 100 * (width[-1]/width[-10:].mean() - 1)
+        return {'볼린저폭': 100 * (width[-1]/width[-10:].mean() - 1)}
 
     @property
-    def bollinger_low(self):
+    def bollinger_height(self) -> dict:
         """
         볼린저 밴드 5거래일 하한선 대비 일봉 오차
         :return:
         """
         df = self.price.join(self.bollinger, how='left')
         calc = (df['종가'] - df['하한선']).values
-        return 100 * (calc[-1] / calc[-5:].mean() - 1)
+        return {'볼린저높이': 100 * (calc[-1] / calc[-5:].mean() - 1)}
 
 if __name__ == "__main__":
     ev = estimate(ticker='006400', src='local')
 
-    print(ev.achieve())
+    # print(ev.achieve())
     # print(ev.spectra)
-    # print(ev.trend_strength)
+    print(ev.trend_strength)
