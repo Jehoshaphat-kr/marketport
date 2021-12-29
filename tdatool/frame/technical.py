@@ -66,6 +66,7 @@ class prices(finances):
             self.price = df[df.index >= start]
         else:
             raise KeyError(f'Key Error: Not Possible argument for src = {src}. Must be local/pykrx/github')
+        self.price_ori = self.price.copy()
         self.__fillz__()
 
         # Technical Analysis
@@ -76,6 +77,7 @@ class prices(finances):
         self._filters_ = pd.DataFrame()
         self._guidance_ = pd.DataFrame()
         self._bend_point_ = pd.DataFrame()
+        self._return_ = pd.DataFrame()
         self._pivot_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         return
@@ -95,49 +97,6 @@ class prices(finances):
                     data.append([o, c, l, h, v])
             self.price = pd.DataFrame(data=data, columns=['시가', '종가', '저가', '고가', '거래량'], index=p.index)
         return
-
-    @property
-    def filters(self) -> pd.DataFrame:
-        """
-        주가 가이드(필터) 데이터프레임
-        :return:
-        """
-        if self._filters_.empty:
-            series = self.price['종가']
-            window = [5, 10, 20, 60, 120]
-            # FIR: SMA
-            objs = {f'SMA{win}D': series.rolling(window=win).mean() for win in window}
-
-            # FIR: EMA
-            objs.update({f'EMA{win}D': series.ewm(span=win).mean() for win in window})
-            for win in window:
-                # IIR: BUTTERWORTH
-                cutoff = (252 / win) / (252 / 2)
-                coeff_a, coeff_b = butter(N=1, Wn=cutoff, btype='lowpass', analog=False, output='ba')
-                objs[f'IIR{win}D'] = pd.Series(data=filtfilt(coeff_a, coeff_b, series), index=series.index)
-            self._filters_ = pd.concat(objs=objs, axis=1)
-        return self._filters_
-
-    @property
-    def guidance(self) -> pd.DataFrame:
-        """
-        주가 전망 지수 데이터프레임
-        :return:
-        """
-        if self._guidance_.empty:
-            combination = [
-                ['중장기IIR', 'IIR60D', 'EMA120D'], ['중기IIR', 'IIR60D', 'EMA60D'], ['중단기IIR', 'IIR20D', 'EMA60D'],
-                ['중장기SMA', 'SMA60D', 'SMA120D'], ['중단기SMA', 'SMA20D', 'SMA60D'],
-                ['중장기EMA', 'EMA60D', 'EMA120D'], ['중단기EMA', 'EMA20D', 'EMA60D']
-            ]
-            objs = {}
-            for label, numerator, denominator in combination:
-                basis = self.filters[numerator] - self.filters[denominator]
-                objs[label] = basis
-                objs[f'd{label}'] = basis.diff()
-                objs[f'd2{label}'] = basis.diff().diff()
-            self._guidance_ = pd.concat(objs=objs, axis=1)
-        return self._guidance_
 
     @property
     def bollinger(self) -> pd.DataFrame:
@@ -238,37 +197,6 @@ class prices(finances):
         )
 
     @property
-    def bend_point(self) -> pd.DataFrame:
-        """
-        추세 분석 변곡점 감지
-        :return:
-        """
-        if not self._bend_point_.empty:
-            return self._bend_point_
-
-        df = pd.concat(objs=[self.guidance, self.macd], axis=1)
-        objs = {}
-        cols = [col for col in df if not col.startswith('d') and not 'Hist' in col and not 'Sig' in col]
-        for col in cols:
-            is_macd = True if col.startswith('MACD') else False
-            data = []
-            tr = df['MACD' if is_macd else col].values[1:]
-            sr = df['MACD-Sig' if is_macd else f'd{col}'].values[1:]
-            for n, date in enumerate(df.index[1:]):
-                if (is_macd and tr[n - 1] < sr[n - 1] and tr[n] > sr[n]) or (not is_macd and sr[n - 1] < 0 < sr[n]):
-                    data.append([date, tr[n], 'Buy', 'triangle-up', 'red'])
-                elif (is_macd and tr[n - 1] > sr[n - 1] and tr[n] < sr[n]) or (not is_macd and sr[n - 1] > 0 > sr[n]):
-                    data.append([date, tr[n], 'Sell', 'triangle-down', 'blue'])
-                elif not is_macd and tr[n - 1] < 0 < tr[n]:
-                    data.append([date, tr[n], 'Golden-Cross', 'star', 'gold'])
-                elif not is_macd and tr[n - 1] > 0 > tr[n]:
-                    data.append([date, tr[n], 'Dead-Cross', 'x', 'black'])
-            objs[f'det{col}'] = pd.DataFrame(data=data, columns=['날짜', 'value', 'bs', 'symbol', 'color']).set_index(
-                keys='날짜')
-        self._bend_point_ = pd.concat(objs=objs, axis=1)
-        return self._bend_point_
-
-    @property
     def pivot(self) -> pd.DataFrame:
         """
         Pivot 지점 데이터프레임임
@@ -361,9 +289,80 @@ class prices(finances):
             self._trend_ = pd.concat(objs=objs, axis=1)
         return self._trend_
 
+    @property
+    def filters(self) -> pd.DataFrame:
+        """
+        주가 가이드(필터) 데이터프레임
+        :return:
+        """
+        if self._filters_.empty:
+            series = self.price['종가']
+            window = [5, 10, 20, 60, 120]
+            # FIR: SMA
+            objs = {f'SMA{win}D': series.rolling(window=win).mean() for win in window}
+
+            # FIR: EMA
+            objs.update({f'EMA{win}D': series.ewm(span=win).mean() for win in window})
+            for win in window:
+                # IIR: BUTTERWORTH
+                cutoff = (252 / win) / (252 / 2)
+                coeff_a, coeff_b = butter(N=1, Wn=cutoff, btype='lowpass', analog=False, output='ba')
+                objs[f'IIR{win}D'] = pd.Series(data=filtfilt(coeff_a, coeff_b, series), index=series.index)
+            self._filters_ = pd.concat(objs=objs, axis=1)
+        return self._filters_
+
+    @property
+    def guidance(self) -> pd.DataFrame:
+        """
+        주가 전망 지수 데이터프레임
+        :return:
+        """
+        if self._guidance_.empty:
+            combination = [
+                ['중장기IIR', 'IIR60D', 'EMA120D'], ['중기IIR', 'IIR60D', 'EMA60D'], ['중단기IIR', 'IIR20D', 'EMA60D'],
+                ['중장기SMA', 'SMA60D', 'SMA120D'], ['중단기SMA', 'SMA20D', 'SMA60D'],
+                ['중장기EMA', 'EMA60D', 'EMA120D'], ['중단기EMA', 'EMA20D', 'EMA60D']
+            ]
+            objs = {}
+            for label, numerator, denominator in combination:
+                basis = self.filters[numerator] - self.filters[denominator]
+                objs[label] = basis
+                objs[f'd{label}'] = basis.diff()
+                objs[f'd2{label}'] = basis.diff().diff()
+            self._guidance_ = pd.concat(objs=objs, axis=1)
+        return self._guidance_
+
+    @staticmethod
+    def calc_return_range(date:datetime, price_block:pd.DataFrame, lim:int=20) -> pd.DataFrame:
+        if len(price_block) > lim:
+            raise ValueError(f'price block size overloaded > lim: {lim}')
+
+        span = price_block[['시가', '고가', '저가', '종가']].values.flatten()
+        if span[0] == 0:
+            return pd.DataFrame(index=[date])
+
+        data = {}
+        returns = [round(100 * (p/span[0] - 1), 2) for p in span]
+        for td in [5, 10, 20]:
+            _max, _min = max(returns[:td * 4]), min(returns[:td * 4])
+            data.update({f'max_return_in_{td}td': _max})
+            data.update({f'min_return_in_{td}td': _min})
+        return pd.DataFrame(data=data, index=[date])
+
+    @property
+    def historical_return(self) -> pd.DataFrame:
+        """
+        과거 시점별 수익률 데이터프레임
+        :return:
+        """
+        if self._return_.empty:
+            p = self.price_ori[['시가', '고가', '저가', '종가']].copy()
+            objs = [self.calc_return_range(date=d, price_block=p[i + 1: i + 21]) for i, d in enumerate(p.index[:-1])]
+            self._return_ = pd.concat(objs=objs, axis=0)
+        return self._return_
 
 if __name__ == "__main__":
-    api = prices(ticker='007070', src='local')
+    api = prices(ticker='035720', src='pykrx')
     print(api.name)
     # print(api.price)
     # print(api.filters)
@@ -372,8 +371,10 @@ if __name__ == "__main__":
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
-    print(api.bollinger)
+    # print(api.bollinger)
     # print(api.pivot)
     # print(api.trend)
     # print(api.stc)
     # print(api.vortex)
+
+    print(api.historical_return)
