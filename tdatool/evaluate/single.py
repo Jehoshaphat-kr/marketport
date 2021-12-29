@@ -6,35 +6,19 @@ class estimate(stock):
     def __init__(self, ticker: str = '005930', src: str = 'github', period: int = 5, meta = None):
         super().__init__(ticker=ticker, src=src, period=period, meta=meta)
 
-        self._ack_perform_ = []
-
         # Usage Frames
-        self._achieve_ = pd.DataFrame(index=self.price.index)
-        self._performance_ = pd.DataFrame()
         self._spectra_ = pd.DataFrame()
         return
 
-    def achieve(self, trade_days:int=20, target_yield:float=5.0) -> pd.DataFrame:
-        """
-        주가 흐름(정답지)별 수익률 달성 여부
-        :return:
-        """
-        key = f'{round(target_yield, 1)}Y_{trade_days}TD'
-        if not key in self._ack_perform_:
-            calc = self.price[['시가', '저가', '고가', '종가']].copy()
-            data = {f'ACH_{key}': [False] * len(calc), f'LEN_{key}': [-1] * len(calc)}
-            for i, date in enumerate(calc.index[:-(trade_days + 1)]):
-                p_span = calc[i + 1: i + (trade_days + 1)].values.flatten()
-                if p_span[0] == 0: continue
+    def est_bollinger(self):
+        ach = self.historical_return.copy()
+        bol = self.bollinger.copy()
 
-                for n, p in enumerate(p_span):
-                    if 100 * (p / p_span[0] - 1) >= target_yield:
-                        data[f'ACH_{key}'][i] = True
-                        data[f'LEN_{key}'][i] = n // 4
-                        break
-            self._achieve_ = self._achieve_.join(pd.DataFrame(data=data, index=calc.index), how='left')
-            self._ack_perform_.append(key)
-        return self._achieve_[[f'ACH_{key}', f'LEN_{key}']].copy()
+        is_rising = lambda x: (x[-5] < x[-3] < x[-1]) and (x[-3] < x[-2] < x[-1])
+        trd = bol.기준선.rolling(window=5).apply(is_rising)
+        df = pd.concat([self.price, ach, bol, trd], axis=1)
+        df.to_csv(r'./test.csv', encoding='euc-kr')
+        return
 
     @property
     def spectra(self):
@@ -94,8 +78,8 @@ class estimate(stock):
         return {'볼린저높이': 100 * (calc[-1] / calc[-5:].mean() - 1)}
 
 if __name__ == "__main__":
-    ev = estimate(ticker='006400', src='local')
+    ev = estimate(ticker='006400', src='pykrx')
 
-    # print(ev.achieve())
+    print(ev.est_bollinger())
     # print(ev.spectra)
-    print(ev.trend_strength)
+    # print(ev.trend_strength)

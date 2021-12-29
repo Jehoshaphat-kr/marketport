@@ -371,10 +371,10 @@ if __name__ == "__main__":
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
-    # print(api.bollinger)
+    print(api.bollinger)
     # print(api.pivot)
     # print(api.trend)
     # print(api.stc)
     # print(api.vortex)
 
-    print(api.historical_return)
+    # print(api.historical_return)
