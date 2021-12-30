@@ -63,9 +63,17 @@ class finances:
         soup = Soup(html, 'lxml')
         texts = soup.find('ul', id='bizSummaryContent').find_all('li')
         text = '\n\n '.join([text.text for text in texts])
-        return ' ' + text[0] + ''.join([
-            '.\n' if text[n] == '.' and (not text[n-1].isdigit() or not text[n-1].isalpha()) else text[n] for n in range(1, len(text) - 1)
-        ])
+
+        syllables = []
+        for n in range(1, len(text) - 2):
+            if text[n] == '.':
+                if text[n-1].isdigit() or text[n+1].isdigit() or text[n+1].isalpha():
+                    syllables.append('.')
+                else:
+                    syllables.append('.\n')
+            else:
+                syllables.append(text[n])
+        return ' ' + text[0] + ''.join(syllables) + text[-2] + text[-1]
 
     @property
     def factors(self) -> pd.DataFrame:
@@ -316,11 +324,11 @@ class finances:
 
 
 if __name__ == "__main__":
-    api = finances(ticker='151910')
+    api = finances(ticker='006400')
     # api = finances(ticker='000660')
     print(api.name)
     # print("# 사업 소개")
-    # print(api.summary)
+    print(api.summary)
 
     # print("# 연간 실적")
     # print(api.annual)
@@ -345,4 +353,4 @@ if __name__ == "__main__":
     # print(api.rnd)
     # print(api.multiples)
     # print(api.relyield)
-    print(api.relmultiple)
+    # print(api.relmultiple)

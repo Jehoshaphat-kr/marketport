@@ -530,15 +530,15 @@ class display(stock):
 
 
 if __name__ == "__main__":
-    api = display()
+    api = display(ticker='006400', src='pykrx', period=10)
     # api.show_overview(show=False, save=True)
     # api.show_supply(show=False, save=True)
-    api.show_relative(show=True, save=False)
+    # api.show_relative(show=True, save=False)
     # api.show_multiples(show=False, save=True)
     # api.show_cost(show=False, save=True)
 
     # api.show_basic(show=False, save=True)
-    # api.show_bollinger(show=False, save=True)
+    api.show_bollinger(show=True, save=True)
     # api.show_momentum(show=True, save=False)
     # api.show_overtrade(show=True, save=False)
     # api.show_vortex(show=True, save=False)

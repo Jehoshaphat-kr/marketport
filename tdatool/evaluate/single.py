@@ -10,15 +10,41 @@ class estimate(stock):
         self._spectra_ = pd.DataFrame()
         return
 
-    def est_bollinger(self):
-        ach = self.historical_return.copy()
-        bol = self.bollinger.copy()
+    @staticmethod
+    def est_bollinger(bb_block:pd.DataFrame) -> pd.DataFrame:
+        """
 
-        is_rising = lambda x: (x[-5] < x[-3] < x[-1]) and (x[-3] < x[-2] < x[-1])
-        trd = bol.기준선.rolling(window=5).apply(is_rising)
-        df = pd.concat([self.price, ach, bol, trd], axis=1)
-        df.to_csv(r'./test.csv', encoding='euc-kr')
+        :param bb_block:
+        :return:
+        """
+        jong, mid, high, low = bb_block.종가, bb_block.기준선, bb_block.상한선, bb_block.하한선
+        is_rise = mid[-3] < mid[-2] < mid[-1] and (mid[-1] / mid[-5] - 1) > 0
+        is_fall = mid[-3] > mid[-2] > mid[-1] and (mid[-1] / mid[-5] - 1) < 0
+        w = (
+            ((mid[-1] - mid[-3]) / 2) / ((mid[-1] - mid[-5]) / 4)
+        ) if is_rise
         return
+
+    def est_bollinger(self) -> pd.DataFrame:
+
+        bb = pd.concat([self.price, self.bollinger], axis=1)
+
+        data = []
+        jong, mid, high, low = bb.종가, bb.기준선, bb.상한선, bb.하한선
+        for i in range(4, len(bb)):
+            is_rise = mid[i - 2] < mid[i - 1] < mid[i] and (mid[i] / mid[i-4] - 1) > 0
+            is_fall = mid[i - 2] > mid[i - 1] > mid[i] and (mid[i] / mid[i-4] - 1) < 0
+
+            w = ((mid[i] - mid[i - 2]) / 2) / ((mid[i] - mid[i - 4]) / 4)
+            locate = 1 if jong[i] > mid[i] else 0
+            h_reserve = 100 * (high[i] / jong[i] - 1)
+            l_reserve = 100 * (mid[i] / jong[i] - 1)
+
+            data.append(
+                w * h_reserve if is_rise else (w ** -1) * l_reserve if is_fall else h_reserve if locate else l_reserve
+            )
+        score = pd.Series(data=data, index=bb.index[4:], name='점수')
+        return bb.join(score, how='left')
 
     @property
     def spectra(self):
@@ -45,41 +71,51 @@ class estimate(stock):
             self._spectra_ = pd.concat(objs=data, axis=1)
         return self._spectra_
 
-    @property
-    def trend_strength(self) -> dict:
-        """
-        추세선 강도
-        :return:
-        """
-        cols = self.trend.columns
-        data = {}
-        for col in cols:
-            _part = self.trend[col].dropna()
-            data[col[:-1]] = 100 * round(_part[-1]/_part[0]-1, 6)
-        return data
-
-    @property
-    def bollinger_width(self) -> dict:
-        """
-        볼린저 밴드 10거래일 평균 폭 대비 최근 폭 오차
-        :return:
-        """
-        width = self.bollinger['밴드폭'].values
-        return {'볼린저폭': 100 * (width[-1]/width[-10:].mean() - 1)}
-
-    @property
-    def bollinger_height(self) -> dict:
-        """
-        볼린저 밴드 5거래일 하한선 대비 일봉 오차
-        :return:
-        """
-        df = self.price.join(self.bollinger, how='left')
-        calc = (df['종가'] - df['하한선']).values
-        return {'볼린저높이': 100 * (calc[-1] / calc[-5:].mean() - 1)}
 
 if __name__ == "__main__":
-    ev = estimate(ticker='006400', src='pykrx')
+    ev = estimate(ticker='006400', src='pykrx', period=10)
 
-    print(ev.est_bollinger())
-    # print(ev.spectra)
-    # print(ev.trend_strength)
+    ach = ev.historical_return
+    est = ev.est_bollinger()
+    frm = pd.concat([est, ach], axis=1)
+
+
+    # scale = ['#F63538', '#BF4045', '#8B444E', '#414554', '#35764E', '#2F9E4F', '#30CC5A']
+    key = 'max_return_in_20td'
+    scale = ['#414554', '#35764E', '#2F9E4F', '#30CC5A']
+    bins = [0.0, 1.0, 3.0, 5.0]
+    frm['color'] = pd.cut(frm[key], bins=bins + [frm[key].max()], labels=scale, right=True)
+    print(frm.columns)
+
+    s_avg = frm['점수'].mean()
+    s_std = frm['점수'].std()
+    print(f"{ev.name}({ev.ticker})")
+    print(f'key = {key}')
+    print(f"전체 기간       : {len(frm)}")
+    print(f"전체 평균스코어 : {s_avg}")
+    print(f"       표준편차 : {s_std}")
+    print(f"전체 평균수익률 : {round(frm[key].mean(), 2)} %")
+    for s in [1, 2, 3]:
+        lim = (s_avg + s * s_std)
+        _frm = frm[frm['점수'] > lim].copy()
+        avg = _frm[key].mean()
+        n_ovr = len(_frm[_frm[key] > 5])
+        print(f'스코어 {round(lim, 2)} 이상 비율        : {round(100 * len(_frm) / len(frm), 2)} %')
+        print(f'스코어 {round(lim, 2)} 이상 평균 수익률 : {round(avg, 2)} %')
+        print(f'스코어 {round(lim, 2)} 이상 달성률      : {round(100 * n_ovr/len(_frm), 2)} %')
+        print('-' * 100)
+
+
+    import plotly.graph_objects as go
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=frm['점수'], y=frm[key],
+        mode='markers', marker=dict(color=frm.color),
+        meta=[f'{d.year}/{d.month}/{d.day}' for d in frm.index],
+        hovertemplate='날짜: %{meta}<br>점수: %{x}<br>수익률: %{y}%<extra></extra>'
+    ))
+    for s in [1, 2, 3]:
+        fig.add_vline(x=s_avg + s * s_std, line=dict(dash='dot', color='black'))
+    fig.update_xaxes(title='점수')
+    fig.update_yaxes(title='max_return_in_10td')
+    fig.show()
