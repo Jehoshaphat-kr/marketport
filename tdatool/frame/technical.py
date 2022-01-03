@@ -77,7 +77,6 @@ class prices(finances):
         self._filters_ = pd.DataFrame()
         self._guidance_ = pd.DataFrame()
         self._bend_point_ = pd.DataFrame()
-        self._return_ = pd.DataFrame()
         self._pivot_ = pd.DataFrame()
         self._trend_ = pd.DataFrame()
         return
@@ -104,15 +103,11 @@ class prices(finances):
         볼린저(Bollinger) 밴드
         :return:
         """
-        hi = self.p_lib.volatility_bbhi * self.p_lib.volatility_bbh
-        li = self.p_lib.volatility_bbli * self.p_lib.volatility_bbl
         return pd.concat(
             objs={
                 '상한선': self.p_lib.volatility_bbh,
                 '하한선': self.p_lib.volatility_bbl,
                 '기준선': self.p_lib.volatility_bbm,
-                '상한지시': hi.drop(index=hi[hi == 0].index),
-                '하한지시': li.drop(index=li[li == 0].index),
                 '밴드폭': self.p_lib.volatility_bbw,
                 '신호': self.p_lib.volatility_bbp
             }, axis=1
@@ -332,46 +327,18 @@ class prices(finances):
             self._guidance_ = pd.concat(objs=objs, axis=1)
         return self._guidance_
 
-    @staticmethod
-    def calc_return_range(date:datetime, price_block:pd.DataFrame, lim:int=20) -> pd.DataFrame:
-        if len(price_block) > lim:
-            raise ValueError(f'price block size overloaded > lim: {lim}')
-
-        span = price_block[['시가', '고가', '저가', '종가']].values.flatten()
-        if span[0] == 0:
-            return pd.DataFrame(index=[date])
-
-        data = {}
-        returns = [round(100 * (p/span[0] - 1), 2) for p in span]
-        for td in [5, 10, 20]:
-            _max, _min = max(returns[:td * 4]), min(returns[:td * 4])
-            data.update({f'max_return_in_{td}td': _max})
-            data.update({f'min_return_in_{td}td': _min})
-        return pd.DataFrame(data=data, index=[date])
-
-    @property
-    def historical_return(self) -> pd.DataFrame:
-        """
-        과거 시점별 수익률 데이터프레임
-        :return:
-        """
-        if self._return_.empty:
-            p = self.price_ori[['시가', '고가', '저가', '종가']].copy()
-            objs = [self.calc_return_range(date=d, price_block=p[i + 1: i + 21]) for i, d in enumerate(p.index[:-1])]
-            self._return_ = pd.concat(objs=objs, axis=0)
-        return self._return_
 
 if __name__ == "__main__":
     api = prices(ticker='035720', src='pykrx')
     print(api.name)
-    # print(api.price)
+    print(api.price)
     # print(api.filters)
     # print(api.guidance)
     # print(api.macd)
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
-    print(api.bollinger)
+    # print(api.bollinger)
     # print(api.pivot)
     # print(api.trend)
     # print(api.stc)

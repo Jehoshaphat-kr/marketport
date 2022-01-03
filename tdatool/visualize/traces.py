@@ -108,17 +108,9 @@ def trace_bollinger(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
         objects[col] = go.Scatter(
             name='볼린저밴드', x=df.index, y=df[col],
             mode='lines', line=dict(color='rgb(184, 247, 212)'), fill='tonexty' if n else None,
-            visible='legendonly', showlegend=False if n else True, legendgroup='볼린저밴드',
+            visible=True, showlegend=False if n else True, legendgroup='볼린저밴드',
             meta=meta,
             hovertemplate=col + '<br>날짜: %{meta}<br>값: %{y:,d}원<extra></extra>',
-        )
-    for n, col in enumerate(['상한지시', '하한지시']):
-        objects[col] = go.Scatter(
-            name=col, x=df.index, y=df[col],
-            mode='markers', marker=dict(
-                symbol=f'triangle-{"up" if n else "down"}', color='red' if n else 'royalblue', size=9
-            ), visible='legendonly', showlegend=True,
-            hoverinfo='skip'
         )
     for col in ['밴드폭', '신호']:
         objects[col] = go.Scatter(

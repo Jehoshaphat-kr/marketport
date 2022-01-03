@@ -1,0 +1,65 @@
+﻿#,판정로직,,CAPA,Factor,,Compensation,,Score,,Performance,
+,위치,방향,,속도(k_vel),폭(k_width),,,전체 평균,전체 편차,상위1%,상위10% 편차
+T01,"is_upper: c[-1] > u[-1]
+is_lower: c[-1] > d[-1]","is_rise : m[-5] < m[-4] < m[-3] < m[-2] < m[-1]
+is_fall : m[-5] > m[-4] > m[-3] > m[-2] > m[-1]
+is_widen: w[-5] < w[-4] < w[-3] < w[-2] < w[-1]","C1. 종가상단: c[-1] ~ u[-1]
+C2. 고가상단: h[-1] ~ u[-1]
+C3. 종가상위: c[-1] ~ m[-1]
+C4. 종가하위: m[-1] ~ c[-1]","base  = (m[-1] - m[-5]) / 4
+curr = (m[-1] - m[-3]) / 2
+k_vel = curr / base","base  = (w[-1] - w[-5]) / 4
+curr = (w[-1] - w[-3]) / 2
+k_width = curr / base","* 상승 판정 & 선반영 
+- CAPA = (5TD내 선반영 분) - CAPA",,3.99,3.82,"242TD
+Y12.56%
+ACH 68.18%","2420TD
+Y11.25%
+ACH 65.29%"
+T02,"is_upper: c[-1] > u[-1]
+is_lower: c[-1] > d[-1]","is_rise : m[-5] < m[-4] < m[-3] < m[-2] < m[-1]
+is_fall : m[-5] > m[-4] > m[-3] > m[-2] > m[-1]
+is_widen: w[-5] < w[-4] < w[-3] < w[-2] < w[-1]","C1. 종가상단: c[-1] ~ u[-1]
+C2. 고가상단: h[-1] ~ u[-1]
+C3. 종가상위: c[-1] ~ m[-1]
+C4. 종가하위: m[-1] ~ c[-1]","base  = (m[-1] - m[-5]) / 4
+curr = (m[-1] - m[-3]) / 2
+k_vel = curr / base","base  = (w[-1] - w[-5]) / 4
+curr = (w[-1] - w[-3]) / 2
+k_width = curr / base",,,3.38,3.12,"242TD
+Y13.43%
+ACH 76.45%","2420TD
+Y11.07%
+ACH 68.6%"
+T03,"is_upper: c[-1] > u[-1]
+is_lower: c[-1] > d[-1]","is_rise : m[-5] < m[-4] < m[-3] < m[-2] < m[-1]
+is_fall : m[-5] > m[-4] > m[-3] > m[-2] > m[-1]
+is_widen: w[-5] < w[-4] < w[-3] < w[-2] < w[-1]","C1. 종가상단: c[-1] ~ u[-1]
+C2. 고가상단: h[-1] ~ u[-1]
+C3. 종가상위: c[-1] ~ m[-1]
+C4. 종가하위: m[-1] ~ c[-1]","base  = (m[-1] - m[-5]) / 4
+curr = (m[-1] - m[-3]) / 2
+k_vel = curr / base","base  = (w[-1] - w[-5]) / 4
+curr = (w[-1] - w[-3]) / 2
+k_width = curr / base","* 하락 판정 & 선반영
+- CAPA = (5TD내 선반영 분) - CAPA",,3.41,3.23,"242TD
+Y13.66%
+ACH 78.1%","2420TD
+Y11.09%
+ACH 69.01%"
+T04,"is_upper: c[-1] > u[-1]
+is_lower: c[-1] > d[-1]","is_rise : m[-5] < m[-4] < m[-3] < m[-2] < m[-1]
+is_fall : m[-5] > m[-4] > m[-3] > m[-2] > m[-1]
+is_widen: w[-5] < w[-4] < w[-3] < w[-2] < w[-1]","C1. 종가상단: c[-1] ~ u[-1]
+C2. 고가상단: h[-1] ~ u[-1]
+C3. 종가상위: c[-1] ~ m[-1]
+C4. 종가하위: m[-1] ~ c[-1]","base  = (m[-1] - m[-5]) / 4
+curr = (m[-1] - m[-3]) / 2
+k_vel = curr / base","base  = (w[-1] - w[-5]) / 4
+curr = max([(w[-1] - w[i]) / 2 for i in range(-4, -1, 1)])
+k_width = curr / base","* 하락 판정 & 선반영
+- CAPA = (5TD내 선반영 분) - CAPA",,3.42,3.12,"242TD
+Y13.8%
+ACH 79.75%","2420TD
+Y11.58%
+ACH 70.97%"

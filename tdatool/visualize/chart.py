@@ -515,22 +515,11 @@ class display(stock):
     #         legendgroup='macd',
     #         showlegend=False
     #     ), row=2, col=1)
-#         # 멀티 팩터
-#         df = self.multi_factor
-#         for n, col in enumerate(df.columns):
-#             fig.add_trace(go.Scatterpolar(
-#                 name=col,
-#                 r=df[col].astype(float),
-#                 theta=df.index,
-#                 fill='toself',
-#                 showlegend=True,
-#                 visible='legendonly' if n else True,
-#                 hovertemplate=col + '<br>팩터: %{theta}<br>값: %{r}<extra></extra>'
-#             ), row=1, col=1)
+
 
 
 if __name__ == "__main__":
-    api = display(ticker='006400', src='pykrx', period=10)
+    api = display(ticker='090430', src='pykrx', period=10)
     # api.show_overview(show=False, save=True)
     # api.show_supply(show=False, save=True)
     # api.show_relative(show=True, save=False)
