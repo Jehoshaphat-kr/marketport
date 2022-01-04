@@ -331,10 +331,10 @@ class prices(finances):
 if __name__ == "__main__":
     api = prices(ticker='035720', src='pykrx')
     print(api.name)
-    print(api.price)
+    # print(api.price)
     # print(api.filters)
     # print(api.guidance)
-    # print(api.macd)
+    print(api.macd)
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)

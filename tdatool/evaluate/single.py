@@ -3,6 +3,12 @@ from tdatool.visualize import display as stock
 from datetime import datetime
 
 
+def is_inc(arr, size:int=5) -> bool:
+    return all([arr[i] < arr[i + 1] for i in range(-1 * size, -1, 1)])
+
+def is_dec(arr, size:int=5) -> bool:
+    return all([arr[i] > arr[i + 1] for i in range(-1 * size, -1, 1)])
+
 class estimate(stock):
     def __init__(self, ticker: str = '005930', src: str = 'github', period: int = 5, meta = None):
         super().__init__(ticker=ticker, src=src, period=period, meta=meta)
@@ -30,11 +36,12 @@ class estimate(stock):
         return pd.DataFrame(data=data, index=[date])
 
     @staticmethod
-    def est_bb(bb:pd.DataFrame) -> tuple:
+    def est_bb(bb:pd.DataFrame, backtest:bool=False) -> tuple:
         """
         볼린저밴드 평가 지표(instant point)
         ** MA20 상승 판정이나 MA선 부근까지 하락한 상태는 변동성 판단 필요
         :param bb: 5TD 이상 포함 볼린저밴드 데이터프레임
+        :param backtest: 과거 테스트 여부
         :return:
         """
         date = bb.index[-1]
@@ -45,17 +52,10 @@ class estimate(stock):
         c, h, l, m, u, d, w = bb.종가, bb.고가, bb.저가, bb.기준선, bb.상한선, bb.하한선, bb.밴드폭
 
         # 상태 판단
-        _dir_ = lambda x, op: (
-                x[-5] < x[-4] < x[-3] < x[-2] < x[-1]
-        ) if op == 'inc' else (
-                x[-5] > x[-4] > x[-3] > x[-2] > x[-1]
-        ) if op == 'dec' else False
-
         is_upper, is_lower = (c[-1] > u[-1]), (c[-1] < d[-1])
-        is_rise, is_fall = _dir_(m, 'inc'), _dir_(m, 'dec')
-        is_widen = _dir_(w, 'inc')
-        is_rise_fast = _dir_(c, 'inc')
-        # is_rise_fast = c[-5] < c[-4] < c[-3] < c[-2] < c[-1]
+        is_rise, is_fall = is_inc(m), is_dec(m)
+        is_widen = is_inc(w)
+        is_rise_fast = is_inc(c)
 
         # 종가 위치에 따른 저항선 대비 상승분
         _c_ = lambda goal, here: 100 * (goal[-1] / here[-1] - 1)
@@ -74,7 +74,32 @@ class estimate(stock):
         capa = refl - capa if (refl > capa and is_fall) or (is_fall and is_rise_fast) else capa
 
         score = k_width * k_vel * capa
-        return date, score, '상승' if is_rise else '하락' if is_fall else '보합', capa, k_vel, k_width
+        if backtest:
+            return date, score, '상승' if is_rise else '하락' if is_fall else '보합', capa, k_vel, k_width
+        else:
+            return score
+
+    @staticmethod
+    def est_macd(macd:pd.DataFrame, backtest:bool=False) -> tuple:
+        """
+        MACD 평가 지표(instant point)
+        :param macd: 5TD 이상 포함 볼린저밴드 데이터프레임
+        :param backtest: 과거 테스트 여부
+        :return:
+        """
+        date = macd.index[-1]
+
+        c, h, l, m, s, hist = macd.종가, macd.고가, macd.저가, macd.MACD, macd['MACD-Sig'], macd['MACD-Hist']
+        is_rise, is_fall = is_inc(hist), is_dec(hist)
+
+        # 히스토그램 추세 capa
+        capa = 100 * ((hist[-1] - hist[-5] + c[-1]) / c[-1] - 1)
+
+        score = capa
+        if backtest:
+            return date, score, '상승' if is_rise else '하락' if is_fall else '보합'
+        else:
+            return score
 
     @property
     def historical_return(self) -> pd.DataFrame:
@@ -95,9 +120,20 @@ class estimate(stock):
         :return:
         """
         bb = pd.concat([self.price, self.bollinger], axis=1)
-        data = [self.est_bb(bb=bb[i - 5 : i]) for i in range(5, len(bb))]
+        data = [self.est_bb(bb=bb[i - 5 : i], backtest=True) for i in range(5, len(bb))]
         score = pd.DataFrame(data=data, columns=['날짜', '점수', '판정', '기본점', '가속팩터', '폭팩터']).set_index(keys='날짜')
         return bb.join(score, how='left')
+
+    @property
+    def historical_macd_estimate(self) -> pd.DataFrame:
+        """
+        MACD 평가 백테스트
+        :return:
+        """
+        macd = pd.concat([self.price, self.macd], axis=1)
+        data = [self.est_macd(macd=macd[i - 5 : i], backtest=True) for i in range(5, len(macd))]
+        score = pd.DataFrame(data=data, columns=['날짜', '점수', '판정']).set_index(keys='날짜')
+        return macd.join(score, how='left')
 
     @property
     def spectra(self):
@@ -153,7 +189,8 @@ if __name__ == "__main__":
         ev = estimate(ticker=ticker, src='pykrx', period=5)
         print(f"{ev.name}({ev.ticker})")
         ach = ev.historical_return
-        est = ev.historical_bb_estimate
+        # est = ev.historical_bb_estimate
+        est = ev.historical_macd_estimate
         _frm = pd.concat([est, ach], axis=1)
         _frm.index.name = '날짜'
         _frm.reset_index(level=0, inplace=True)
@@ -191,6 +228,7 @@ if __name__ == "__main__":
 
 
     import plotly.graph_objects as go
+    import plotly.offline as of
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=frm['점수'], y=frm[key],
@@ -198,8 +236,8 @@ if __name__ == "__main__":
         meta=[f'{d.year}/{d.month}/{d.day}' for d in frm['날짜']], text=frm['판정'], customdata=frm['종목'],
         hovertemplate='%{customdata}<br>날짜: %{meta}<br>점수: %{x}<br>수익률: %{y}%<br>판정: %{text}<extra></extra>'
     ))
-    for s in score_lim_by_class:
-        fig.add_vline(x=s, line=dict(dash='dot', color='black'))
+    for lim in score_lim_by_class:
+        fig.add_vline(x=lim, line=dict(dash='dot', color='black'))
 
     fig.update_layout(
         title=title,
@@ -213,4 +251,4 @@ if __name__ == "__main__":
             )
         ],
     )
-    fig.show()
+    of.plot(fig, filename='./test.html', auto_open=False)
