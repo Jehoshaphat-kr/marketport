@@ -89,10 +89,14 @@ class estimate(stock):
         """
         date = macd.index[-1]
 
-        c, h, l, m, s, hist = macd.종가, macd.고가, macd.저가, macd.MACD, macd['MACD-Sig'], macd['MACD-Hist']
+        c, h, l = macd.종가, macd.고가, macd.저가
+        m, s, hist, stc = macd.MACD, macd['MACD-Sig'], macd['MACD-Hist'], macd.STC
+
         is_rise, is_fall = is_inc(hist), is_dec(hist)
 
-        # 히스토그램 추세 capa
+        # STC 기반 CAPA
+        is_stc_fall = is_dec(stc, 3) and stc[-3] - stc[-2] >= 1 and stc[-2] - stc[-1] >= 1
+        is_stc_rise = is_inc(stc, 3)
         capa = 100 * ((hist[-1] - hist[-5] + c[-1]) / c[-1] - 1)
 
         score = capa
@@ -130,7 +134,7 @@ class estimate(stock):
         MACD 평가 백테스트
         :return:
         """
-        macd = pd.concat([self.price, self.macd], axis=1)
+        macd = pd.concat([self.price, self.macd, self.stc], axis=1)
         data = [self.est_macd(macd=macd[i - 5 : i], backtest=True) for i in range(5, len(macd))]
         score = pd.DataFrame(data=data, columns=['날짜', '점수', '판정']).set_index(keys='날짜')
         return macd.join(score, how='left')

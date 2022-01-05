@@ -527,7 +527,7 @@ if __name__ == "__main__":
     # api.show_cost(show=False, save=True)
 
     # api.show_basic(show=False, save=True)
-    api.show_bollinger(show=True, save=True)
-    # api.show_momentum(show=True, save=False)
+    # api.show_bollinger(show=True, save=True)
+    api.show_momentum(show=True, save=True)
     # api.show_overtrade(show=True, save=False)
     # api.show_vortex(show=True, save=False)

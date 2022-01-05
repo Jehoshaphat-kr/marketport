@@ -137,7 +137,7 @@ def trace_macd(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
     for n, col in enumerate(['MACD', 'MACD-Sig']):
         objects[col] = go.Scatter(
             name=col, x=df.index, y=df[col],
-            visible=True, showlegend=False if n else True, legendgroup='MACD',
+            visible=True, showlegend=True,
             meta=meta,
             hovertemplate='날짜: %{meta}<br>' + col + ': %{y:.2f}<extra></extra>'
         )
@@ -147,9 +147,9 @@ def trace_macd(df:pd.DataFrame) -> ItemsView[str, go.Scatter]:
     objects['MACD-Hist'] = go.Bar(
         name='MACD-Hist', x=df.index, y=df['MACD-Hist'],
         marker=dict(color=color),
-        visible=True, showlegend=False, legendgroup='MACD',
+        visible=True, showlegend=True,
         meta=meta,
-        hoverinfo='skip'
+        hovertemplate='날짜: %{meta}<br>MACD-Hist: %{y:.2f}<extra></extra>'
     )
     return objects.items()
 
