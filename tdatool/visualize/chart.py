@@ -184,7 +184,7 @@ class display(stock):
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.ticker}{self.name}-볼린저밴드.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-모멘텀.html")
         return fig
 
     def show_overtrade(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -219,7 +219,7 @@ class display(stock):
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.ticker}{self.name}-RSI.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-과매매.html")
         return fig
 
     def show_vortex(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -249,7 +249,7 @@ class display(stock):
         if show:
             fig.show()
         if save:
-            save_as(fig=fig, filename=f"{self.ticker}{self.name}-RSI.html")
+            save_as(fig=fig, filename=f"{self.ticker}{self.name}-VORTEX.html")
         return fig
 
     def show_overview(self, show: bool = False, save: bool = False) -> go.Figure:
@@ -519,7 +519,9 @@ class display(stock):
 
 
 if __name__ == "__main__":
-    api = display(ticker='090430', src='pykrx', period=10)
+    api = display(ticker='006400', src='pykrx', period=10)
+    print(f'{api.name}({api.ticker}) 차트요소')
+
     # api.show_overview(show=False, save=True)
     # api.show_supply(show=False, save=True)
     # api.show_relative(show=True, save=False)
@@ -528,6 +530,6 @@ if __name__ == "__main__":
 
     # api.show_basic(show=False, save=True)
     # api.show_bollinger(show=True, save=True)
-    api.show_momentum(show=True, save=True)
-    # api.show_overtrade(show=True, save=False)
+    # api.show_momentum(show=True, save=True)
+    api.show_overtrade(show=False, save=True)
     # api.show_vortex(show=True, save=False)

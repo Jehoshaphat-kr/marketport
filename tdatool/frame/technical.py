@@ -334,7 +334,7 @@ if __name__ == "__main__":
     # print(api.price)
     # print(api.filters)
     # print(api.guidance)
-    print(api.macd)
+    # print(api.macd)
     # print(api.bend_point)
     # print(api.bend_point['detMACD'].dropna())
     # print(api.h_sup_res)
@@ -343,5 +343,6 @@ if __name__ == "__main__":
     # print(api.trend)
     # print(api.stc)
     # print(api.vortex)
-
-    # print(api.historical_return)
+    print(api.rsi)
+    print(api.stoch_rsi)
+    print(api.cci)

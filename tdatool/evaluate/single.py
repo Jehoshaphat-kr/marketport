@@ -80,28 +80,58 @@ class estimate(stock):
             return score
 
     @staticmethod
-    def est_macd(macd:pd.DataFrame, backtest:bool=False) -> tuple:
+    def est_overtrade(frm:pd.DataFrame, backtest:bool=False) -> tuple:
         """
-        MACD 평가 지표(instant point)
-        :param macd: 5TD 이상 포함 볼린저밴드 데이터프레임
-        :param backtest: 과거 테스트 여부
+
+        :param frm:
+        :param backtest:
         :return:
         """
-        date = macd.index[-1]
 
-        c, h, l = macd.종가, macd.고가, macd.저가
-        m, s, hist, stc = macd.MACD, macd['MACD-Sig'], macd['MACD-Hist'], macd.STC
+        date = frm.index[-1]
+        o, h, l, c = frm.시가, frm.고가, frm.저가, frm.종가
+        rsi, s_rsi, s_rsi_sig, cci = frm.RSI, frm['STOCH-RSI'], frm['STOCH-RSI-Sig'], frm.CCI
 
-        is_rise, is_fall = is_inc(hist), is_dec(hist)
+        price_steps = [1 if c[i] < c[i + 1] else 0 for i in range(-10, -1, 1)]
+        is_price_rise = all([c[i] < c[-1] for i in range(-10, -1, 1)]) and sum(price_steps) >= 5
+        is_price_fall = all([c[i] > c[-1] for i in range(-10, -1, 1)]) or sum(price_steps) < 5
 
-        # STC 기반 CAPA
-        is_stc_fall = is_dec(stc, 3) and stc[-3] - stc[-2] >= 1 and stc[-2] - stc[-1] >= 1
-        is_stc_rise = is_inc(stc, 3)
-        capa = 100 * ((hist[-1] - hist[-5] + c[-1]) / c[-1] - 1)
+        cci_steps = [1 if cci[i] < cci[i+1] else 0 for i in range(-10, -1, 1)]
+        is_cci_rise = all([cci[i] < cci[-1] for i in range(-10, -1, 1)]) and sum(cci_steps) >= 5
+        is_cci_fall = all([cci[i] > cci[-1] for i in range(-10, -1, 1)]) or sum(cci_steps) < 5
 
-        score = capa
+        # CAPACITY
+        if cci[-1] > 200:
+            capa = cci[-1] - 200
+        elif cci[-1] > 100:
+            capa = 200 - cci[-1]
+        elif cci[-1] > 0:
+            capa = 100 - cci[-1]
+        elif cci[-1] > -100:
+            capa = 0 - cci[-1]
+        else:
+            capa = -100 - cci[-1]
+
+        # Velocity Factor
+        numer = cci[-1] - cci[-2]
+        denom = max([(cci[-1] - cci[i]) / (abs(i) - 1) for i in [-6, -5, -4]])
+        # denom = (cci[-1] - cci[-5]) / 4
+        slope = numer / denom
+        if slope > 1:
+            acc = slope
+            dec = slope ** -1
+        else:
+            acc = slope ** -1
+            dec = slope
+
+        k_vel = acc if is_cci_rise and is_price_rise else dec if is_cci_fall or is_price_fall else 1
+
+
+        # score = capa if is_cci_rise and is_price_rise else 0.5 * capa if is_cci_fall or is_price_fall else 0
+        score = k_vel * capa
+
         if backtest:
-            return date, score, '상승' if is_rise else '하락' if is_fall else '보합'
+            return date, score, '상승' if is_cci_rise and is_price_rise else '하락' if is_cci_fall else '보합'
         else:
             return score
 
@@ -129,15 +159,15 @@ class estimate(stock):
         return bb.join(score, how='left')
 
     @property
-    def historical_macd_estimate(self) -> pd.DataFrame:
+    def historical_trading_estimate(self) -> pd.DataFrame:
         """
-        MACD 평가 백테스트
+        과매매 평가 백테스트
         :return:
         """
-        macd = pd.concat([self.price, self.macd, self.stc], axis=1)
-        data = [self.est_macd(macd=macd[i - 5 : i], backtest=True) for i in range(5, len(macd))]
+        frm = pd.concat([self.price, self.rsi, self.stoch_rsi, self.cci], axis=1)
+        data = [self.est_overtrade(frm=frm[i - 10 : i], backtest=True) for i in range(10, len(frm))]
         score = pd.DataFrame(data=data, columns=['날짜', '점수', '판정']).set_index(keys='날짜')
-        return macd.join(score, how='left')
+        return frm.join(score, how='left')
 
     @property
     def spectra(self):
@@ -168,33 +198,33 @@ class estimate(stock):
 if __name__ == "__main__":
     title = 'T03-보상-상승시'
     tickers = [
-        '005930', # 삼성전자
-        '000660', # SK하이닉스
+        # '005930', # 삼성전자
+        # '000660', # SK하이닉스
         '006400', # 삼성SDI
-        '066570', # LG전자
-        '018260', # 삼성에스디에스
-        '009150', # 삼성전기
-        '005380', # 현대차
-        '035420', # NAVER
-        '035720', # 카카오
-        '051900', # LG생활건강
-        '090430', # 아모레퍼시픽
-        '105560', # KB금융
-        '055550', # 신한지주
-        '051910', # LG화학
-        '005490', # POSCO
-        '207940', # 삼성바이오로직스
-        '068270', # 셀트리온
-        '096770', # SK이노베이션
+        # '066570', # LG전자
+        # '018260', # 삼성에스디에스
+        # '009150', # 삼성전기
+        # '005380', # 현대차
+        # '035420', # NAVER
+        # '035720', # 카카오
+        # '051900', # LG생활건강
+        # '090430', # 아모레퍼시픽
+        # '105560', # KB금융
+        # '055550', # 신한지주
+        # '051910', # LG화학
+        # '005490', # POSCO
+        # '207940', # 삼성바이오로직스
+        # '068270', # 셀트리온
+        # '096770', # SK이노베이션
     ]
 
     objs = []
     for ticker in tickers:
-        ev = estimate(ticker=ticker, src='pykrx', period=5)
+        ev = estimate(ticker=ticker, src='local', period=10)
         print(f"{ev.name}({ev.ticker})")
         ach = ev.historical_return
         # est = ev.historical_bb_estimate
-        est = ev.historical_macd_estimate
+        est = ev.historical_trading_estimate
         _frm = pd.concat([est, ach], axis=1)
         _frm.index.name = '날짜'
         _frm.reset_index(level=0, inplace=True)
