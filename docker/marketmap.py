@@ -90,13 +90,19 @@ class frame:
             sr = data[gap].sort_values(ascending=False)
             lower = sr[sr < -steady_point]
             upper = sr[sr > steady_point]
-            range[gap] = [
-                lower.values[int(0.66 * len(lower))],
-                lower.values[int(0.33 * len(lower))],
-                -steady_point, steady_point,
-                upper.values[int(0.66 * len(upper))],
-                upper.values[int(0.33 * len(upper))]
-            ]
+            if gap == 'R1D':
+                if upper.empty or len(upper) < 3:
+                    range[gap] = [-3, -2, -1, -0.5, -0.25, -0.01]
+                else:
+                    range[gap] = [-2, -1, -0.01, 0.01, 1, 2]
+            else:
+                range[gap] = [
+                    lower.values[int(0.66 * len(lower))],
+                    lower.values[int(0.33 * len(lower))],
+                    -steady_point, steady_point,
+                    upper.values[int(0.66 * len(upper))],
+                    upper.values[int(0.33 * len(upper))]
+                ]
         return range
 
     def __base__(self) -> pd.DataFrame:

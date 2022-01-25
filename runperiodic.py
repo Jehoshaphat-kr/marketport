@@ -28,6 +28,6 @@ if __name__ == "__main__":
     time.sleep(1)
 
     ''' MARKET MAP '''
-    # maps = docker.marketmap(date=today)
-    # maps.collect()
-    # maps.convert()
+    maps = docker.marketmap(date=today)
+    maps.collect()
+    maps.convert()
