@@ -90,11 +90,8 @@ class frame:
             sr = data[gap].sort_values(ascending=False)
             lower = sr[sr < -steady_point]
             upper = sr[sr > steady_point]
-            if gap == 'R1D':
-                if upper.empty or len(upper) < 3:
-                    range[gap] = [-3, -2, -1, -0.5, -0.25, -0.01]
-                else:
-                    range[gap] = [-2, -1, -0.01, 0.01, 1, 2]
+            if upper.empty or len(upper) < 3:
+                range[gap] = [-3, -2, -1, -0.5, -0.25, -0.01]
             else:
                 range[gap] = [
                     lower.values[int(0.66 * len(lower))],
@@ -249,6 +246,7 @@ class frame:
         """
         scale = ['#F63538', '#BF4045', '#8B444E', '#414554', '#35764E', '#2F9E4F', '#30CC5A']  # Low <---> High
         index = self.cindex(data=data)
+
         ''' 수익률 기간별 색상 선정 '''
         __frm__ = data.copy()
         __frm__.set_index(keys=['종목코드', '분류'] if self.kind == "THEME" else ['종목코드'], inplace=True)
@@ -259,7 +257,11 @@ class frame:
             _returns.fillna(0, inplace=True)
 
             mi = _returns.min() if _returns.min() < index[period][0] else _returns.min() - 1
-            sr = pd.cut(_returns, bins=[mi] + index[period] + [_returns.max()], labels=scale, right=True)
+            bins = [mi] + index[period] + [_returns.max()]
+            for n, val in enumerate(bins[:-1]):
+                if val == bins[n+1] and n > 0:
+                    bins[n] = bins[n] - ((bins[n] - bins[n-1]) / 2)
+            sr = pd.cut(_returns, bins=bins, labels=scale, right=True)
             sr.name = "C" + period
             df_color = df_color.join(sr.astype(str), how='left')
         __frm__ = __frm__.join(df_color, how='left')
